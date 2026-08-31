@@ -83,7 +83,15 @@ Vestige is not a from-scratch design and does not pretend to be. It takes a **di
 
 Honest about what is and is not established:
 
-- **Measured**: rank-1 0.98–1.00 end to end on a 183-memory, 16-project corpus; unchanged under a 24% scope over-claim; zero contaminated blobs reaching git history from 80 planted leaks at 100-engineer scale. The harness is public: [memory-stack-lab](https://github.com/breferrari/memory-stack-lab).
-- **Not established**: it has never run as an installed plugin in a real session. There is no store-to-store migration. Scale is untested past 16 projects. Eight defects were found in this codebase by benchmarking rather than by anything failing — assume there are more.
+- **Measured**: rank-1 1.000 end to end on a 183-memory, 16-project corpus, unchanged under a 24% scope over-claim; 80 of 80 planted secrets quarantined with zero contaminated blobs reaching git history and zero clean memories held back; the behavioural layer verified inside live sessions rather than only in tests. The full evidence, method and reasoning is in **[RECORD.md](./RECORD.md)**; the harness is public at [memory-stack-lab](https://github.com/breferrari/memory-stack-lab) and every number regenerates from `./reproduce.sh`.
+- **Not established**: it has not been used in anger on real work over time. Scale is measured to 40 projects and untested beyond it. There is no consolidation, no decay signal, and no episodic tier — the last of those tested and deliberately not built. Defects in this codebase have been found by benchmarking rather than by anything failing; assume there are more.
+
+## Documentation
+
+| | |
+|---|---|
+| [RECORD.md](./RECORD.md) | how it was built, what was measured, why this shape. Start here to evaluate it |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | how it works — the write path, the recall path, the sync path |
+| [PROVENANCE.md](./PROVENANCE.md) | which component came from which prior system, and what is new |
 
 MIT.

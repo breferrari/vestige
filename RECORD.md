@@ -1,0 +1,193 @@
+# The Record
+
+This is how Vestige was built, what was measured, and why it has the shape it has. It exists so the reasoning can be checked by someone who was not here — every number below is reproducible from a committed script, and every design choice is traceable to a measurement that preceded it.
+
+Three companion documents, kept separate on purpose: [ARCHITECTURE.md](./ARCHITECTURE.md) is how it works, [PROVENANCE.md](./PROVENANCE.md) is which parts came from where, and [README.md](./README.md) is how to install it. This document is the argument.
+
+---
+
+## The method
+
+**A pre-registered ablation ladder.** Before anything was measured, each rung was written down with a graded prediction of what it would show. A rung changes exactly one variable from the rung below it. The point of pre-registration is that a prediction recorded before the run cannot be quietly adjusted after it — and two of these predictions were wrong in ways that changed the design.
+
+The fixture is the same throughout: **183 memories across 16 projects, seeded and deterministic**, and **64 queries** with exactly one correct document each. Because there is one right answer per query, `found@5` is recall of the target and `rank-1` is how often the right memory is the first thing the agent sees. `prec@5` is capped at 0.200 by construction and reaches 1.0 trivially under any per-caller view, so it is reported and not read.
+
+Every number here comes from `./reproduce.sh` in the [memory-stack-lab](https://github.com/breferrari/memory-stack-lab) repository, which regenerates the corpus from seed, writes it through this plugin's real write path, queries through this plugin's real public API, and scores the output. The raw run artifacts are committed under `runs/<date>/`.
+
+---
+
+## What the ladder showed
+
+Each rung adds one thing to the rung above it.
+
+| Rung | found@5 | rank-1 | MRR | foreign in top-5 |
+|---|---|---|---|---|
+| V0 · a flat shared pool, as shipped | 0.297 | 0.078 | 0.157 | 4.63 |
+| V1 · a better retrieval engine over the same flat pool | 0.344 | 0.109 | 0.183 | 4.64 |
+| V2 · project-namespaced filenames | 0.344 | 0.109 | 0.188 | 4.64 |
+| V3 · scope metadata written into the document | 0.406 | 0.109 | 0.190 | 4.59 |
+| V4a · one index per project | 1.000 | 0.969 | 0.984 | 0.00 |
+| V4b · rank globally, filter afterwards (depth 5) | 0.375 | 0.375 | 0.375 | 0.00 |
+| V4b · the same, at the engine's maximum depth of 20 | 0.953 | 0.938 | 0.945 | 0.00 |
+| **Vestige** | **1.000** | **1.000** | **1.000** | **0.00** |
+
+Four conclusions, and the last two are the architecture.
+
+**A better engine over a shared pool buys almost nothing.** V0 → V1 moves found@5 by 0.047. The retrieval problem is not that the engine ranks badly; it is that it is ranking over 183 documents of which 172 could not possibly be relevant to the caller.
+
+**Telling the document who it is for does not help either.** V2 and V3 write ownership into the filename and then into the frontmatter, and rank-1 stays at 0.109. Metadata that nothing filters on is decoration.
+
+**Isolation is what moves the numbers** — 0.109 to 0.969 in one step. Everything before it is a rounding error by comparison.
+
+**The order of filtering and ranking is not an implementation detail.** V4b ranks globally and filters afterwards, which is the obvious way to build it. It is bounded by the engine's result depth: 0.375 at depth 5, and it only reaches 0.938 by asking for the engine's maximum of 20 results per query and throwing most of them away. That ceiling does not move as projects multiply — with forty projects it would degrade further, while filtering first does not. Vestige filters first and ranks inside the result.
+
+---
+
+## Against MCS, before and after qmd
+
+The prior art is [`mcs-cli/memory`](https://github.com/mcs-cli/memory), and it recently gained a qmd retrieval backend on the `bruno/qmd-retrieval-backend` branch. Both were measured on the same corpus and the same queries. The branch was replicated from its own `sync-memories.sh` rather than approximated — a named index under the project via `QMD_CONFIG_DIR`/`INDEX_PATH`, one embedding model in all three of qmd's model slots, and the structured lex/vec query shape with reranking off that its own instructions tell the agent to use.
+
+| | found@5 | rank-1 | MRR | foreign in top-5 |
+|---|---|---|---|---|
+| MCS before qmd, shared pool | 0.297 | 0.078 | 0.157 | 4.63 |
+| MCS with qmd, **one index per project** | 1.000 | **0.984** | 0.992 | 0.00 |
+| MCS with qmd, **one shared pool** | 0.359 | **0.078** | 0.167 | 4.63 |
+| **Vestige** | 1.000 | **1.000** | 1.000 | 0.00 |
+
+**The honest reading is not "ours wins."**
+
+**Configured one index per project, that design equals this one.** When memories live in a directory per project, isolation is a property of the layout, and a reach model buys nothing on top of it. Vestige's filter is not better in that configuration — it is the same answer reached a more complicated way.
+
+**The reach model earns its place only when memories are shared.** That is not a hypothetical case; it is what a shared team pool produces, and it is the configuration this whole class of tool exists for. There, rank-1 falls from 0.984 to **0.078**, with 4.6 documents from other people's projects in every five results. Adding qmd does not fix it, because retrieval quality was never the failure — the pool contains the wrong documents and ranks them correctly.
+
+So the claim this project makes is narrow and worth stating precisely: **the reach model buys nothing over per-project directories, and everything over a shared pool.** A system that supports both needs it.
+
+---
+
+## Both layers are load-bearing
+
+A reach filter without semantic ranking, on the same views:
+
+| ranking | found@5 | rank-1 | MRR |
+|---|---|---|---|
+| facets only — specificity and recency, no query relevance | 0.438 | **0.094** | 0.202 |
+| with semantic ranking | 1.000 | **0.984** | 0.992 |
+
+**10.5× on rank-1.** The filter decides what may be seen; the ranker decides which of it answers the question, and neither substitutes for the other. This was measured late, because an early measurement on eleven-document views could not show it — a top-5 drawn from eleven documents is nearly free. The search engine is therefore a hard dependency and is provisioned, updated and repaired by the plugin rather than assumed.
+
+---
+
+## Robustness to a writer who over-claims
+
+A reach model is only as good as the reach people declare, and people declare too widely. At a 24% over-claim rate — roughly one memory in four claiming to be relevant everywhere:
+
+| | rank-1 | MRR | foreign in top-5 | documents per view |
+|---|---|---|---|---|
+| a bare reach filter | 0.391 | 0.628 | 3.53 | 52.7 |
+| with reach narrowed at write time | **0.984** | 0.992 | **0.00** | 11.4 |
+
+The full end-to-end run at 24% over-claim scores **identically to the correctly-scoped run** — 1.000 / 1.000 / 0.00. Every over-claim is narrowed at the point of writing, because a memory that claims `general` while naming specific projects has told you its real reach in the same breath. The pool ends up holding zero falsely-general memories, so there is nothing for the filter to be defeated by.
+
+This is the single most important robustness property in the system: **the filter is not asked to survive bad declarations, because bad declarations do not get written.**
+
+---
+
+## Containment
+
+A pool that leaves the machine needs to be inspected, and neither parent system inspects content. Against a corpus with 80 planted secrets — credentials, tokens, keys, private hosts, home paths, and base64-wrapped variants:
+
+| | result |
+|---|---|
+| planted secrets quarantined | **80 of 80** |
+| clean memories wrongly held | **0** |
+| contaminated blobs reachable in remote history | **0** |
+
+The zero in the last row is the one that matters, and it is a property of *where* the gate runs, not how good it is. Running the same gate after staging produced a clean `HEAD` over a dirty history — every planted secret still reachable in the remote by SHA. For anything append-only, retraction is not containment. The gate now runs before the sync path takes its first look at the working tree.
+
+Two properties were learned rather than designed: it **fails closed**, counting an unreadable file or an unevaluable rule as contaminated; and it **quarantines per file**, so one bad memory does not hold up the clean ones — a gate that loses clean work is a gate people switch off.
+
+Its limits are stated rather than implied: it is a deny-list, it cannot see a secret spaced out character by character or described in prose, and that was measured rather than assumed.
+
+---
+
+## Latency, which nobody measured for a week
+
+Retrieval quality was benchmarked for a week before anyone timed a query. The first measurement was **2,748ms per search**, essentially all of it model loading, repeated on every call.
+
+That is not a polish issue. For a system whose entire protocol is *consult the store before answering*, a slow search is a search the agent learns to avoid, which silently undoes the behavioural layer that makes any of the rest happen. The fix was to stop paying the startup cost per query: the search engine speaks MCP over stdio, so it is spawned once and kept resident for the session.
+
+Latency is now reported split, because one mean over both describes neither:
+
+| | |
+|---|---|
+| first query for a project (builds that caller's view index) | seconds, not milliseconds |
+| every subsequent query | roughly an order of magnitude less |
+
+**Absolute figures are deliberately not published here.** Every timing this machine has produced under load has been wrong, once by a factor that inverted the conclusion, and the current numbers were taken on a machine in use. Each run therefore stamps its own load average into its results file, and `reproduce.sh` refuses to run above a threshold — a number without its conditions is not interpretable later, and "I will remember the machine was busy" has failed every time it was relied upon.
+
+---
+
+## A negative result, kept
+
+An early design intended to separate episodic session logs from durable lessons, on the widely-repeated argument that mixing them degrades retrieval of both. Tested directly, at ratios up to 5.6 logs per lesson, **it did not reproduce** — found@5 and rank-1 were unchanged.
+
+The tier was therefore not built. It is recorded here because a borrowed argument that survives testing and one that was never tested look identical in a design document, and because the reason a feature is *absent* is worth as much as the reason one is present.
+
+---
+
+## The layer that makes any of it happen
+
+Plumbing without a trigger is a store nobody writes to. `remember` and `search` existed for some time with nothing that ever called them.
+
+Three mechanisms fix that, and all three were verified inside a live session rather than a unit test, because installing a plugin proves its hooks are registered and nothing more:
+
+- **The protocol is injected once per session.** Verified by a live session completing a sentence that appears in no other file on the machine.
+- **Delegating discovery is gated.** A sub-agent spawned to "go find out" begins without what the store already holds, and rediscovers it at the cost of the whole sub-agent. The gate advises and never hard-blocks — a script bug must not become a barrier with no escape — and its advice is budgeted per turn so it cannot drive a loop.
+- **Capture is a judgement, not a recording.** Most sessions produce nothing worth keeping, and that is the expected outcome; a store full of near-misses is worse than a small one.
+
+Every decision the gate makes is appended to a bounded audit log, because the failure modes here are silent by construction: a nudge that fired and a nudge that was never reached are indistinguishable from the state alone, and so are a matcher that never matched and a tool that was never called. Live verification found real defects in this layer that no unit test could have — all of them in the wiring rather than the logic — which is the argument for the log rather than an argument against the design.
+
+---
+
+## How the pieces follow from the evidence
+
+| The measurement | What it forced |
+|---|---|
+| Isolation moves rank-1 from 0.109 to 0.969; the engine alone moves it 0.031 | Reach is the primary structure; retrieval is applied inside it |
+| Filter-after-rank is bounded by the engine's result depth | Filter first, rank second, over a materialised per-caller view |
+| A bare filter collapses to 0.391 under 24% over-claim | Narrow reach at write time; never widen it |
+| A memory's reach and its location can disagree | Reach *computes* storage — the same declaration decides both |
+| Facet-only ranking scores 0.094 | The search engine is a hard dependency, provisioned and healed by the plugin |
+| A gate after staging leaves a dirty history | The content gate runs before the sync path touches the tree |
+| 2,748ms per search | The engine is kept resident for the session |
+| Every silent failure in this layer presents as "no results" | `explain`, and an audit log for the gate |
+
+---
+
+## What is deliberately absent
+
+Stated so nobody assumes otherwise: there is no episodic tier (tested, did not reproduce), no consolidation of repeated observations into rules, and no decay or confirmation signal — nothing tracks whether a memory was ever retrieved or ever useful, so nothing can sink on evidence. The content gate is a deny-list with measured limits. These are open, not hidden.
+
+---
+
+## Reproducing all of it
+
+```bash
+git clone https://github.com/breferrari/memory-stack-lab
+git clone https://github.com/breferrari/vestige      # sibling directory
+cd memory-stack-lab && ./reproduce.sh
+```
+
+It regenerates the seeded corpus, writes it through this plugin's real write path at both over-claim rates, queries through the plugin's public API, scores against the known-correct answers, and writes everything to `runs/<date>/`. It refuses to produce timings on a loaded machine.
+
+The benchmarks import the plugin directly. They used to import a copy of its write path, which broke when the plugin renamed a module — the break was the good outcome, since for as long as both existed the benchmark measured code that had quietly stopped matching the thing it claimed to measure.
+
+---
+
+## Authorship and audit trail
+
+Vestige was designed and built by **Brenno Ferrari**, in the open, with the full history in this repository and the measurements in [memory-stack-lab](https://github.com/breferrari/memory-stack-lab). Every claim in this document is either reproducible from `reproduce.sh` or traceable to a commit that states what was measured and what it changed.
+
+It is explicitly not a from-scratch design, and [PROVENANCE.md](./PROVENANCE.md) says which component came from where, naming both parents: the distribution model and most of the behavioural layer from [`mcs-cli/memory`](https://github.com/mcs-cli/memory) by Bruno Guidolim, and the reach model and write contract from [obsidian-mind](https://github.com/breferrari/obsidian-mind). What is new here is listed separately, and most of it is new only because combining the two exposed a gap that neither had on its own.
+
+Where a claim was made and then measured to be wrong, it was retracted in the commit history rather than quietly edited — including one benchmark whose numbers turned out to be measuring the machine's load rather than the software.

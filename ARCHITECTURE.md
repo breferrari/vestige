@@ -2,7 +2,7 @@
 
 How a memory gets in, where it goes, and who can see it. Every box below is code that exists.
 
-Where each piece came from — MCS, obsidian-mind, or new here — is in [PROVENANCE.md](./PROVENANCE.md).
+Where each piece came from — MCS, obsidian-mind, or new here — is in [PROVENANCE.md](./PROVENANCE.md). Why it is shaped this way, with the measurements that forced each choice, is in [RECORD.md](./RECORD.md).
 
 The whole design rests on one property: **reach is declared once, and everything else is derived from it.** Storage location, visibility and ranking are all computed from the same declaration, so they cannot drift apart.
 
@@ -14,6 +14,7 @@ The whole design rests on one property: **reach is declared once, and everything
 core/lib/memory.ts       the write contract, reach filter and pool naming
 core/lib/stores.ts       store kinds, routing, and materialising an external store
 core/lib/index-view.ts   per-caller search index over exactly what a caller may see
+core/lib/qmd-session.ts  the search engine, kept resident for the session
 core/lib/vestige.ts      the public API: remember, recall, search, explain
 core/lib/sanitize.ts     the content gate
 core/lib/sync.ts         git pull/push, deletion review, bounded retry
@@ -64,6 +65,12 @@ Three deliberate choices:
 - **The protocol goes in once per session, not once per turn.** Injecting every turn is the reliable choice and costs a paragraph of context forever; text that appears every turn also stops being read.
 - **The gate advises and never hard-blocks.** A script bug must not become a gate with no escape. Nudges are budgeted per turn so the hook cannot drive a search-then-spawn loop.
 - **Capturing nothing is the expected outcome.** Most sessions produce no durable memory, and a store full of near-misses is worse than a small one.
+
+Two properties of the gate exist because this layer fails silently by construction, and both were found by running it in a live session rather than a test:
+
+**Every decision the gate makes is appended to a bounded `gate-log.jsonl`.** From the session state alone, a nudge that fired and a nudge that was never reached are indistinguishable — and so are a hook matcher that never matched and a tool that was never called. Without the log there is no way to tell a working gate from an absent one.
+
+**Delegations are counted while in flight.** A sub-agent's prompt arrives on the same `UserPromptSubmit` hook carrying the parent's session id *and* the parent's transcript path; nothing in the payload distinguishes it. Treated as a new turn it resets the barrier the delegation just tripped, which voids both the record that the parent searched and the per-turn nudge budget that stops the gate driving a loop. A prompt arriving during an in-flight delegation therefore does not start a new turn, with a time-to-live so an aborted delegation cannot pin the barrier open. The accepted cost — a prompt genuinely sent mid-delegation carries the previous turn's search — is written down as a test, because a trade-off nobody encoded is a bug the next session will "fix" back.
 
 ---
 
@@ -176,6 +183,12 @@ flowchart TD
 **The index is per caller and named.** Isolation is a property of the index *name*, not of a directory — running `qmd init` in a per-caller directory silently creates nothing and every collection lands in the shared default index, which would put every project's memories in one place underneath a filter whose entire job is to keep them apart. Index builds are serialised with a cross-process lock, because two sessions building at once contend on one shared cache and the loser would otherwise degrade to unranked results without saying so.
 
 **Both layers matter.** The filter decides what may be seen; the ranker decides which of it answers the question. With the filter and no semantic ranking, rank-1 accuracy is 0.09 against 0.98. Neither substitutes for the other.
+
+**The engine is resident, not re-launched per query.** Invoking the search CLI per call paid its model-loading cost every time — 2,748ms per search, almost none of it search. qmd speaks MCP over stdio, so one child is started per session and reused, keyed on the view's signature so a changed visible set re-resolves rather than answering from a stale collection. The child is unreferenced from the event loop and torn down on exit, because a resident child otherwise keeps a CLI or a test runner from ever exiting.
+
+**Reranking is off, and that is a measurement rather than a default.** With the reranker enabled, rank-1 was 0.906 and four of sixty-four queries fell back to unranked results; with it disabled, 1.000 and none — and faster. It was re-sorting an already-correct list and demoting the right answer.
+
+**The first query for a caller builds that caller's view index**, which costs seconds; every subsequent query in the session does not. Both are reported separately in the benchmarks, since one mean over the two describes neither.
 
 ---
 
