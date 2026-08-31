@@ -171,8 +171,20 @@ export function ensureIndex(opts: { cwd?: string; caller?: Caller } = {}): Index
 			if (!add.ok) { lastErr = `collection add: ${add.stderr.slice(0, 160)}`; }
 			else {
 				const emb = runQmd(["--index", name, "embed"], { cwd: idx });
-				if (emb.ok) { built = true; break; }
-				lastErr = `embed: ${emb.stderr.slice(0, 160)}`;
+				// EXIT 0 IS NOT SUCCESS. qmd's embed lock reports contention as
+				// success: it prints "Another embed process is already running.
+				// Skipping." and exits 0. Trusting that stamps the signature having
+				// embedded nothing, and the staleness check then skips the pending
+				// work indefinitely — a stale index that reports itself current,
+				// forever, with no error.
+				//
+				// Verified empirically, after the failure mode was described in
+				// mcs-cli/memory's qmd branch. Our own cross-process lock does not
+				// cover it: the lock has a deadline after which it proceeds, and
+				// any other qmd user on the machine holds the same global lock.
+				const skipped = /another embed process is already running|skipping/i.test(`${emb.stdout} ${emb.stderr}`);
+				if (emb.ok && !skipped) { built = true; break; }
+				lastErr = skipped ? "embed skipped: another embed holds qmd's global lock" : `embed: ${emb.stderr.slice(0, 160)}`;
 			}
 			// full jitter, capped — a contended store clears in milliseconds
 			const cap = Math.min(1500, 60 * 2 ** attempt);
