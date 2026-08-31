@@ -114,7 +114,13 @@ describe("hostile environment", () => {
 		remember(mem({ projects: ["advrepo"] }), { cwd: d });
 		search("idempotency", { cwd: d });                      // build it
 		const idxDir = join(HOME, "index");
-		for (const n of readdirSync(idxDir)) writeFileSync(join(idxDir, n, ".vestige-signature"), "corrupt");
+		// Without qmd no index is ever built, so there is nothing to corrupt. What
+		// this asserts - that search still ANSWERS - holds either way.
+		if (existsSync(idxDir)) {
+			for (const n of readdirSync(idxDir)) {
+				try { writeFileSync(join(idxDir, n, ".vestige-signature"), "corrupt"); } catch { /* not a directory */ }
+			}
+		}
 		const r = search("idempotency", { cwd: d });
 		assert.ok(r.hits.length >= 0);
 		assert.ok(["qmd", "facets"].includes(r.engine));
