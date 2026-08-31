@@ -21,15 +21,18 @@ let text;
 try { text = readFileSync(join(root, doc), "utf8"); } catch { console.log(`FAIL  cannot read ${doc}`); process.exit(1); }
 
 let bad = 0;
+let badPaths = 0;
 
 // paths
 const paths = [...new Set([...text.matchAll(/\b((?:core|host|codex)\/[A-Za-z0-9_./-]*)/g)].map((m) => m[1].replace(/[.,)]+$/, "")))];
 for (const p of paths) {
   if (existsSync(join(root, p))) continue;
   console.log(`FAIL  path named in ${doc} does not exist: ${p}`);
-  bad++;
+  bad++; badPaths++;
 }
-console.log(`ok    ${paths.length} paths all exist`);
+// Report what held, not the total. An unconditional "all exist" line next to a
+// FAIL is the misleading-green shape this whole guard exists to prevent.
+console.log(`${badPaths ? "FAIL " : "ok   "} ${paths.length - badPaths}/${paths.length} paths exist`);
 
 // symbols in backticks that look like identifiers
 const src = [];
@@ -48,7 +51,7 @@ const symbols = [...new Set([...text.matchAll(/`([a-z][A-Za-z0-9]{4,})`/g)].map(
   .filter((s) => !["general", "project", "platform", "memories", "always", "before", "inferred", "verified", "external", "local"].includes(s));
 const missing = symbols.filter((s) => !new RegExp(`\\b${s}\\b`).test(all));
 for (const m of missing) { console.log(`FAIL  symbol named in ${doc} not found in core/: ${m}`); bad++; }
-console.log(`ok    ${symbols.length - missing.length}/${symbols.length} named symbols resolve`);
+console.log(`${missing.length ? "FAIL " : "ok   "} ${symbols.length - missing.length}/${symbols.length} named symbols resolve`);
 
 console.log(bad ? `\n${bad} staleness problem(s).` : "\nArchitecture document agrees with the code it describes.");
 process.exit(bad ? 1 : 0);
