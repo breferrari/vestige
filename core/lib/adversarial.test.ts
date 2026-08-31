@@ -109,10 +109,10 @@ describe("hostile environment", () => {
 		assert.doesNotThrow(() => recall({ cwd: d }));
 	});
 
-	test("search survives a corrupt index and still answers", () => {
+	test("search survives a corrupt index and still answers", async () => {
 		const d = repo();
 		remember(mem({ projects: ["advrepo"] }), { cwd: d });
-		search("idempotency", { cwd: d });                      // build it
+		await search("idempotency", { cwd: d });                // build it
 		const idxDir = join(HOME, "index");
 		// Without qmd no index is ever built, so there is nothing to corrupt. What
 		// this asserts - that search still ANSWERS - holds either way.
@@ -121,7 +121,7 @@ describe("hostile environment", () => {
 				try { writeFileSync(join(idxDir, n, ".vestige-signature"), "corrupt"); } catch { /* not a directory */ }
 			}
 		}
-		const r = search("idempotency", { cwd: d });
+		const r = await search("idempotency", { cwd: d });
 		assert.ok(r.hits.length >= 0);
 		assert.ok(["qmd", "facets"].includes(r.engine));
 	});

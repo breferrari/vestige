@@ -41,13 +41,13 @@ function repo(name: string): string {
 const BODY = (who: string) => `In ${who} a retried mutation must carry an idempotency key or the ledger double counts the second attempt.`;
 
 describe("index isolation", () => {
-	test("a project's search never returns another project's memory", { skip: ENGINE ? false : "qmd is not installed; isolation cannot be tested without semantic ranking" }, () => {
+	test("a project's search never returns another project's memory", { skip: ENGINE ? false : "qmd is not installed; isolation cannot be tested without semantic ranking" }, async () => {
 		const A = repo("alpha-svc"), B = repo("beta-svc");
 		remember({ title: "Alpha retried mutations need an idempotency key", body: BODY("alpha-svc"), confidence: "inferred", scope: "project", projects: ["alpha-svc"] }, { cwd: A });
 		remember({ title: "Beta retried mutations need an idempotency key", body: BODY("beta-svc"), confidence: "inferred", scope: "project", projects: ["beta-svc"] }, { cwd: B });
 
-		const a = search("idempotency key for a retried mutation", { cwd: A });
-		const b = search("idempotency key for a retried mutation", { cwd: B });
+		const a = await search("idempotency key for a retried mutation", { cwd: A });
+		const b = await search("idempotency key for a retried mutation", { cwd: B });
 
 		// non-vacuity: if the engine fell back, this test proves nothing
 		assert.equal(a.engine, "qmd", `A fell back to ${a.engine}; isolation untested`);

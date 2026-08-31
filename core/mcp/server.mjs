@@ -86,7 +86,7 @@ const TOOLS = [
 
 const text = (s) => ({ content: [{ type: "text", text: s }] });
 
-function callTool(name, args) {
+async function callTool(name, args) {
   const cwd = process.env.CLAUDE_PROJECT_DIR || process.cwd();
   if (name === "remember") {
     const r = remember(args ?? {}, { cwd });
@@ -106,7 +106,7 @@ function callTool(name, args) {
     return text(hits.map((h) => `- [${h.tier}/${h.scope}${h.foreign ? "/foreign" : ""}] ${h.name}`).join("\n"));
   }
   if (name === "search") {
-    const { hits, engine } = search(args?.query ?? "", { cwd, limit: args?.limit ?? 10 });
+    const { hits, engine } = await search(args?.query ?? "", { cwd, limit: args?.limit ?? 10 });
     if (!hits.length) return text("No visible memory matched.");
     return text(`engine: ${engine}\n` + hits.map((h) => `- [${h.tier}/${h.scope}] ${h.name}`).join("\n"));
   }
@@ -151,7 +151,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       return send({ jsonrpc: "2.0", id, result: { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "vestige", version: "0.1.0" } } });
     }
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS } });
-    if (method === "tools/call") return send({ jsonrpc: "2.0", id, result: callTool(params?.name, params?.arguments) });
+    if (method === "tools/call") { callTool(params?.name, params?.arguments).then((result) => send({ jsonrpc: "2.0", id, result })).catch((e) => send({ jsonrpc: "2.0", id, error: { code: -32603, message: String(e?.message ?? e) } })); return; }
     if (method && method.startsWith("notifications/")) return;
     if (id !== undefined) send({ jsonrpc: "2.0", id, result: {} });
   } catch (err) {

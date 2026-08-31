@@ -27,6 +27,7 @@
 import { execFileSync } from "node:child_process";
 import { runQmd, resolveQmdEntry } from "../setup/qmd.ts";
 import { ensureIndex } from "./index-view.ts";
+import { sessionQuery } from "./qmd-session.ts";
 import { existsSync } from "node:fs";
 import { capture as rawCapture, readPool, visibleTo, rankBySpecificity, isForeign, type PoolEntry, type CaptureResult } from "./memory.ts";
 import { visibilityReason, isVisibleTo } from "./om/memory-recall.ts";
@@ -130,46 +131,63 @@ export function hasQmd(): boolean {
  * either way, so the fallback is safe; it is simply much worse at answering.
  * Callers are told which engine ran precisely so this is never invisible.
  */
-export function search(query: string, opts: { cwd?: string; limit?: number } = {}): { hits: RecallHit[]; engine: "qmd" | "facets"; note?: string } {
+/**
+ * Async because the fast path is a persistent qmd process rather than a CLI
+ * spawn: 18ms warm against 2748ms per invocation, which is the difference
+ * between a search an agent calls freely and one it learns to avoid.
+ */
+export async function search(query: string, opts: { cwd?: string; limit?: number } = {}): Promise<{ hits: RecallHit[]; engine: "qmd" | "facets"; note?: string }> {
 	const cwd = opts.cwd ?? process.cwd();
 	const limit = opts.limit ?? 10;
 	const base = recall({ cwd, limit: 500 });
 	if (!query) return { hits: base.slice(0, limit), engine: "facets" };
 
-	// Build or refresh the caller's index. This is what search was missing: it
-	// used to take an indexDir nobody supplied, so it ALWAYS fell back to facet
-	// order — rank-1 0.094 against qmd's 0.984 — while the benchmarks built
-	// indexes in the harness and reported the good number.
+	// Build or refresh the caller's index. `search` once took an `indexDir` that
+	// nothing supplied, so it ALWAYS fell back to facet order — rank-1 0.094
+	// against 0.984 — while the benchmarks built indexes in the harness and
+	// reported the good number.
 	const idx = ensureIndex({ cwd });
-	if (!idx.ok || !idx.dir) {
+	if (!idx.ok || !idx.dir || !idx.index) {
 		return { hits: base.slice(0, limit), engine: "facets", note: `semantic ranking unavailable (${idx.detail}); results are ordered by specificity and recency, which is much weaker` };
 	}
+
+	const byName = new Map(base.map((h) => [h.name, h]));
+	const resolve = (id: string) => byName.get(id) ?? byName.get(`${id}.md`);
+
+	// RERANKING IS OFF BY DEFAULT — measurably worse on both axes. It earns its
+	// place on a large undifferentiated corpus by re-sorting a noisy candidate
+	// list; after a reach filter has reduced the field to what one caller can
+	// see, it re-sorts an already-correct list and sometimes demotes the right
+	// answer. Same 64 queries: found@5 0.953 -> 1.000, rank-1 0.906 -> 1.000,
+	// latency 2346ms -> 1576ms, and four queries stopped failing outright.
+	const rerank = process.env.VESTIGE_RERANK === "1";
+
+	// FAST PATH: a resident qmd process. Spawning the CLI costs ~2.7s per query,
+	// nearly all of it loading a model into a process that then exits — the
+	// difference between a search an agent calls freely and one it avoids, which
+	// matters because the protocol asks it to search before answering. Warm: 18ms.
+	//
+	// Keyed on the view signature: the server reads its collection list once at
+	// startup, so a rebuilt view has to respawn it.
 	try {
-		// RERANKING OFF BY DEFAULT — it was measurably worse on both axes.
-		//
-		// The reranker earns its place on a large undifferentiated corpus, where
-		// it re-sorts a noisy candidate list. It does not earn it here: the reach
-		// filter has already reduced the field to what one caller can see, so the
-		// reranker is re-sorting an already-correct list and sometimes demotes the
-		// right answer. Measured on the same 64 queries:
-		//
-		//              found@5   rank-1   served by qmd   latency
-		//   rerank      0.953    0.906       60/64        2346ms
-		//   no rerank   1.000    1.000       64/64        1576ms
-		//
-		// It also cost four queries outright, falling back to facet order.
-		// `VESTIGE_RERANK=1` restores it for anyone whose corpus differs enough
-		// to want it.
-		const r = runQmd(["--index", idx.index!, "query", query, "-n", String(limit), ...(process.env.VESTIGE_RERANK === "1" ? [] : ["--no-rerank"]), "--format", "files"], { cwd: idx.dir });
+		const ids = await sessionQuery({ index: idx.index, signature: idx.signature ?? "", cwd: idx.dir, query, limit, rerank });
+		if (ids?.length) {
+			const hits = ids.map(resolve).filter(Boolean) as RecallHit[];
+			if (hits.length) return { hits, engine: "qmd" };
+		}
+	} catch { /* fall through to the CLI rather than failing the search */ }
+
+	try {
+		const r = runQmd(["--index", idx.index, "query", query, "-n", String(limit), ...(rerank ? [] : ["--no-rerank"]), "--format", "files"], { cwd: idx.dir });
 		if (!r.ok) return { hits: base.slice(0, limit), engine: "facets", note: "qmd query failed; fell back to facet order" };
-		const order = [...r.stdout.matchAll(/qmd:\/\/[^/]+\/([^\s:,]+\.md)/g)].map((m) => m[1]!);
-		const byName = new Map(base.map((h) => [h.name, h]));
-		const hits = order.map((n) => byName.get(n)).filter(Boolean) as RecallHit[];
+		const order = [...r.stdout.matchAll(/qmd:\/\/[^/]+\/([^\s:,?]+\.md)/g)].map((m) => m[1]!);
+		const hits = order.map(resolve).filter(Boolean) as RecallHit[];
 		return hits.length ? { hits, engine: "qmd" } : { hits: base.slice(0, limit), engine: "facets", note: "nothing matched; showing what is visible" };
 	} catch {
 		return { hits: base.slice(0, limit), engine: "facets", note: "qmd query threw; fell back to facet order" };
 	}
 }
+
 
 export interface Explanation {
 	readonly name: string;

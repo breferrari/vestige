@@ -96,6 +96,8 @@ export interface IndexResult {
 	readonly dir: string | null;
 	/** The named qmd index to query. Isolation lives in this name. */
 	readonly index?: string;
+	/** Signature of the visible set, so a resident query session can be invalidated. */
+	readonly signature?: string;
 	readonly docs: number;
 	readonly rebuilt: boolean;
 	readonly detail: string;
@@ -127,7 +129,7 @@ export function ensureIndex(opts: { cwd?: string; caller?: Caller } = {}): Index
 
 	try {
 		if (existsSync(stampFile) && readFileSync(stampFile, "utf8") === sig) {
-			return { ok: true, dir: idx, index: indexNameFor(caller), docs: visible.length, rebuilt: false, detail: "index current" };
+			return { ok: true, dir: idx, index: indexNameFor(caller), signature: sig, docs: visible.length, rebuilt: false, detail: "index current" };
 		}
 	} catch { /* rebuild */ }
 
@@ -141,7 +143,7 @@ export function ensureIndex(opts: { cwd?: string; caller?: Caller } = {}): Index
 		// sessions start together.
 		try {
 			if (existsSync(stampFile) && readFileSync(stampFile, "utf8") === sig) {
-				return { ok: true, dir: idx, index: indexNameFor(caller), docs: visible.length, rebuilt: false, detail: "index current" };
+				return { ok: true, dir: idx, index: indexNameFor(caller), signature: sig, docs: visible.length, rebuilt: false, detail: "index current" };
 			}
 		} catch { /* rebuild */ }
 
@@ -193,7 +195,7 @@ export function ensureIndex(opts: { cwd?: string; caller?: Caller } = {}): Index
 		if (!built) return { ok: false, dir: null, docs: visible.length, rebuilt: true, detail: `index build failed after retries — ${lastErr}` };
 
 		writeFileSync(stampFile, sig);
-		return { ok: true, dir: idx, index: name, docs: visible.length, rebuilt: true, detail: `indexed ${visible.length} memories into ${name}` };
+		return { ok: true, dir: idx, index: name, signature: sig, docs: visible.length, rebuilt: true, detail: `indexed ${visible.length} memories into ${name}` };
 	} catch (e) {
 		return { ok: false, dir: null, docs: visible.length, rebuilt: false, detail: `index build failed: ${String((e as Error)?.message ?? e)}` };
 	}
