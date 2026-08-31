@@ -1,0 +1,23 @@
+{
+  "name": "vestige",
+  "displayName": "Vestige",
+  "version": "0.1.0",
+  "description": "Durable, scoped memory for coding agents. Memories are markdown with reach declared per memory - project, platform or general - so a lesson from one repo reaches the repos it applies to and no others. It searches before it guesses, captures what transfers, keeps credentials out of what it writes, and can explain why any memory was shown or withheld.",
+  "author": {
+    "name": "Brenno Ferrari"
+  },
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "mcp",
+    "knowledge",
+    "recall",
+    "codex"
+  ],
+  "mcpServers": "./host/mcp.json",
+  "hooks": "./host/hooks/hooks.json",
+  "skills": "./host/skills/",
+  "commands": [
+    "./host/commands/memory-status.md"
+  ]
+}

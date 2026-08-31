@@ -1,0 +1,12 @@
+{
+  "name": "vestige",
+  "owner": {
+    "name": "Brenno Ferrari"
+  },
+  "plugins": [
+    {
+      "source": ".",
+      "description": "Durable, scoped memory for coding agents."
+    }
+  ]
+}

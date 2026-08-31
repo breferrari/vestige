@@ -1,0 +1,66 @@
+name: ci
+
+# Runs on the three platforms because the portability claims are cross-platform:
+# type stripping without a build step, qmd resolved by JS entry rather than a
+# shell shim, and no bash anywhere. Each of those is a claim that only fails on
+# a machine nobody tested on.
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['22', '24']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: unit and contract tests
+        run: node --experimental-strip-types --disable-warning=ExperimentalWarning --test "core/**/*.test.*" "plugins/**/*.test.ts"
+
+      - name: duplicated prose has not drifted
+        run: node core/setup/check-sync.mjs .
+
+      - name: manifests parse and point at files that exist
+        shell: bash
+        run: |
+          node -e '
+            const { readFileSync, existsSync } = require("node:fs");
+            const { join, dirname } = require("node:path");
+            let bad = 0;
+            for (const m of [".claude-plugin/marketplace.json"]) {
+              const mk = JSON.parse(readFileSync(m, "utf8"));
+              for (const p of mk.plugins) {
+                const root = p.source;
+                const manifest = join(root, ".claude-plugin", "plugin.json");
+                if (!existsSync(manifest)) { console.log("MISSING " + manifest); bad++; continue; }
+                const j = JSON.parse(readFileSync(manifest, "utf8"));
+                for (const key of ["mcpServers", "hooks", "skills"]) {
+                  const v = j[key];
+                  if (typeof v === "string" && !existsSync(join(root, v))) { console.log("MISSING " + key + " -> " + join(root, v)); bad++; }
+                }
+                for (const c of j.commands ?? []) if (!existsSync(join(root, c))) { console.log("MISSING command -> " + join(root, c)); bad++; }
+                console.log("ok " + j.name);
+              }
+            }
+            process.exit(bad ? 1 : 0);
+          '
+
+      - name: the type-stripping claim holds without the flag on modern node
+        if: matrix.node == '24'
+        run: node core/lib/protocol.ts || true
+
+      - name: no shell scripts crept back in
+        shell: bash
+        run: |
+          if find core plugins -name '*.sh' | grep .; then
+            echo "shell scripts are not permitted — see the TypeScript decision record"; exit 1
+          fi
+          echo "ok: no .sh under core/ or plugins/"

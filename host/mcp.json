@@ -1,0 +1,10 @@
+{
+  "vestige": {
+    "command": "node",
+    "args": [
+      "--experimental-strip-types",
+      "--disable-warning=ExperimentalWarning",
+      "${CLAUDE_PLUGIN_ROOT}/core/mcp/server.mjs"
+    ]
+  }
+}

@@ -1,0 +1,58 @@
+import { test, describe } from "node:test";
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+/**
+ * Cross-project isolation of the search index.
+ *
+ * This is the guard for the worst bug found in this build. `qmd init` in a
+ * per-caller directory prints "ready to go with new local index" and creates
+ * nothing, so every caller's collection landed in qmd's shared default index —
+ * one index holding every project's memories, underneath a reach filter whose
+ * entire job is to keep them apart. A query from one project could return
+ * another's, and nothing in the facet layer could have caught it, because the
+ * facet layer was never the thing that failed.
+ *
+ * Isolation now comes from a per-caller NAMED index. This test is the reason it
+ * cannot silently regress.
+ */
+const HOME = mkdtempSync(join(tmpdir(), "vh-idx-"));
+process.env.VESTIGE_HOME = HOME;
+process.env.VESTIGE_NO_UPDATE = "1";
+const { remember, search } = await import("./vestige.ts");
+const { indexName } = await import("./index-view.ts");
+
+function repo(name: string): string {
+	const d = join(mkdtempSync(join(tmpdir(), "iso-")), name);
+	mkdirSync(d, { recursive: true });
+	execFileSync("git", ["init", "-q", d]);
+	return d;
+}
+const BODY = (who: string) => `In ${who} a retried mutation must carry an idempotency key or the ledger double counts the second attempt.`;
+
+describe("index isolation", () => {
+	test("a project's search never returns another project's memory", () => {
+		const A = repo("alpha-svc"), B = repo("beta-svc");
+		remember({ title: "Alpha retried mutations need an idempotency key", body: BODY("alpha-svc"), confidence: "inferred", scope: "project", projects: ["alpha-svc"] }, { cwd: A });
+		remember({ title: "Beta retried mutations need an idempotency key", body: BODY("beta-svc"), confidence: "inferred", scope: "project", projects: ["beta-svc"] }, { cwd: B });
+
+		const a = search("idempotency key for a retried mutation", { cwd: A });
+		const b = search("idempotency key for a retried mutation", { cwd: B });
+
+		// non-vacuity: if the engine fell back, this test proves nothing
+		assert.equal(a.engine, "qmd", `A fell back to ${a.engine}; isolation untested`);
+		assert.equal(b.engine, "qmd", `B fell back to ${b.engine}; isolation untested`);
+		assert.ok(a.hits.length > 0 && b.hits.length > 0, "both projects must find their own memory");
+
+		assert.equal(a.hits.some((h) => h.name.startsWith("beta-svc")), false, "alpha saw beta's memory");
+		assert.equal(b.hits.some((h) => h.name.startsWith("alpha-svc")), false, "beta saw alpha's memory");
+	});
+
+	test("callers get distinct index names, and an anonymous caller its own", () => {
+		assert.notEqual(indexName({ project: "a", platforms: [] }), indexName({ project: "b", platforms: [] }));
+		assert.match(indexName({ project: null, platforms: [] }), /_anon/);
+	});
+});

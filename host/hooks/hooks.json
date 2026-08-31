@@ -1,0 +1,44 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --experimental-strip-types --disable-warning=ExperimentalWarning \"${CLAUDE_PLUGIN_ROOT}/host/hooks/activate.ts\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "node --experimental-strip-types --disable-warning=ExperimentalWarning \"${CLAUDE_PLUGIN_ROOT}/host/hooks/gate.ts\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --experimental-strip-types --disable-warning=ExperimentalWarning \"${CLAUDE_PLUGIN_ROOT}/host/hooks/gate.ts\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__vestige__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --experimental-strip-types --disable-warning=ExperimentalWarning \"${CLAUDE_PLUGIN_ROOT}/host/hooks/gate.ts\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
