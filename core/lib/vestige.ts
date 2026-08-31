@@ -145,7 +145,22 @@ export function search(query: string, opts: { cwd?: string; limit?: number } = {
 		return { hits: base.slice(0, limit), engine: "facets", note: `semantic ranking unavailable (${idx.detail}); results are ordered by specificity and recency, which is much weaker` };
 	}
 	try {
-		const r = runQmd(["--index", idx.index!, "query", query, "-n", String(limit), "--format", "files"], { cwd: idx.dir });
+		// RERANKING OFF BY DEFAULT — it was measurably worse on both axes.
+		//
+		// The reranker earns its place on a large undifferentiated corpus, where
+		// it re-sorts a noisy candidate list. It does not earn it here: the reach
+		// filter has already reduced the field to what one caller can see, so the
+		// reranker is re-sorting an already-correct list and sometimes demotes the
+		// right answer. Measured on the same 64 queries:
+		//
+		//              found@5   rank-1   served by qmd   latency
+		//   rerank      0.953    0.906       60/64        2346ms
+		//   no rerank   1.000    1.000       64/64        1576ms
+		//
+		// It also cost four queries outright, falling back to facet order.
+		// `VESTIGE_RERANK=1` restores it for anyone whose corpus differs enough
+		// to want it.
+		const r = runQmd(["--index", idx.index!, "query", query, "-n", String(limit), ...(process.env.VESTIGE_RERANK === "1" ? [] : ["--no-rerank"]), "--format", "files"], { cwd: idx.dir });
 		if (!r.ok) return { hits: base.slice(0, limit), engine: "facets", note: "qmd query failed; fell back to facet order" };
 		const order = [...r.stdout.matchAll(/qmd:\/\/[^/]+\/([^\s:,]+\.md)/g)].map((m) => m[1]!);
 		const byName = new Map(base.map((h) => [h.name, h]));
