@@ -22,8 +22,15 @@ import { join } from "node:path";
 const HOME = mkdtempSync(join(tmpdir(), "vh-idx-"));
 process.env.VESTIGE_HOME = HOME;
 process.env.VESTIGE_NO_UPDATE = "1";
-const { remember, search } = await import("./vestige.ts");
+const { remember, search, hasQmd } = await import("./vestige.ts");
 const { indexName } = await import("./index-view.ts");
+
+// qmd is a ~250MB install with model downloads, so CI does not have it. Without
+// it `search` falls back to facet order, and this test's non-vacuity guard
+// correctly refuses to claim isolation from a fallback. SKIPPING is the honest
+// outcome — the property is untested here, not broken. Failing would train
+// everyone to ignore a red build.
+const ENGINE = hasQmd();
 
 function repo(name: string): string {
 	const d = join(mkdtempSync(join(tmpdir(), "iso-")), name);
@@ -34,7 +41,7 @@ function repo(name: string): string {
 const BODY = (who: string) => `In ${who} a retried mutation must carry an idempotency key or the ledger double counts the second attempt.`;
 
 describe("index isolation", () => {
-	test("a project's search never returns another project's memory", () => {
+	test("a project's search never returns another project's memory", { skip: ENGINE ? false : "qmd is not installed; isolation cannot be tested without semantic ranking" }, () => {
 		const A = repo("alpha-svc"), B = repo("beta-svc");
 		remember({ title: "Alpha retried mutations need an idempotency key", body: BODY("alpha-svc"), confidence: "inferred", scope: "project", projects: ["alpha-svc"] }, { cwd: A });
 		remember({ title: "Beta retried mutations need an idempotency key", body: BODY("beta-svc"), confidence: "inferred", scope: "project", projects: ["beta-svc"] }, { cwd: B });

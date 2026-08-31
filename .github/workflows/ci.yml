@@ -23,7 +23,7 @@ jobs:
           node-version: ${{ matrix.node }}
 
       - name: unit and contract tests
-        run: node --experimental-strip-types --disable-warning=ExperimentalWarning --test "core/**/*.test.*" "plugins/**/*.test.ts"
+        run: node --experimental-strip-types --disable-warning=ExperimentalWarning --test "core/**/*.test.*" "host/**/*.test.ts"
 
       - name: the architecture document is not stale
         run: node core/setup/check-docs.mjs ARCHITECTURE.md .
