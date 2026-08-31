@@ -53,5 +53,20 @@ const missing = symbols.filter((s) => !new RegExp(`\\b${s}\\b`).test(all));
 for (const m of missing) { console.log(`FAIL  symbol named in ${doc} not found in core/: ${m}`); bad++; }
 console.log(`${missing.length ? "FAIL " : "ok   "} ${symbols.length - missing.length}/${symbols.length} named symbols resolve`);
 
+// Mermaid renders node text WHITE in a dark theme. A style that sets a light
+// `fill` without an explicit `color` therefore produces white-on-pale — a box
+// that is simply blank for every reader on a dark background, and perfectly
+// legible for whoever wrote it on a light one. Caught only by someone
+// screenshotting it, which is not a test.
+const styles = [...text.matchAll(/^\s*style\s+(\S+)\s+([^\n]*fill:[^\n]*)$/gm)];
+let badStyle = 0;
+for (const [, node, decl] of styles) {
+  if (!/fill:\s*#[0-9a-fA-F]{3,6}/.test(decl)) continue;
+  if (/color:/.test(decl)) continue;
+  console.log(`FAIL  styled node ${node} sets a fill but no text colour — invisible in a dark theme`);
+  badStyle++; bad++;
+}
+console.log(`${badStyle ? "FAIL " : "ok   "} ${styles.length - badStyle}/${styles.length} styled nodes declare a text colour`);
+
 console.log(bad ? `\n${bad} staleness problem(s).` : "\nArchitecture document agrees with the code it describes.");
 process.exit(bad ? 1 : 0);

@@ -51,10 +51,10 @@ flowchart TD
     M -->|"machine-local config"| O["suggest a local note instead"]
     M -->|"public docs, or a session log"| P["capture nothing"]
 
-    style C fill:#e7f5ff,stroke:#1971c2
-    style K fill:#fff4e6,stroke:#e67700
-    style N fill:#d3f9d8,stroke:#2f9e44
-    style P fill:#f8f9fa,stroke:#868e96
+    style C fill:#e7f5ff,stroke:#1971c2,color:#16181d
+    style K fill:#fff4e6,stroke:#e67700,color:#16181d
+    style N fill:#d3f9d8,stroke:#2f9e44,color:#16181d
+    style P fill:#f8f9fa,stroke:#868e96,color:#16181d
 ```
 
 Three deliberate choices:
@@ -98,13 +98,13 @@ flowchart TD
     M --> N["claimFile<br/>atomic, suffixes rather than clobbering"]
     N --> O["memory on disk"]
 
-    style R1 fill:#ffe3e3,stroke:#c92a2a
-    style R2 fill:#ffe3e3,stroke:#c92a2a
-    style R3 fill:#ffe3e3,stroke:#c92a2a
-    style Q fill:#ffe8cc,stroke:#d9480f
-    style F fill:#fff4e6,stroke:#e67700
-    style H fill:#fff4e6,stroke:#e67700
-    style O fill:#d3f9d8,stroke:#2f9e44
+    style R1 fill:#ffe3e3,stroke:#c92a2a,color:#16181d
+    style R2 fill:#ffe3e3,stroke:#c92a2a,color:#16181d
+    style R3 fill:#ffe3e3,stroke:#c92a2a,color:#16181d
+    style Q fill:#ffe8cc,stroke:#d9480f,color:#16181d
+    style F fill:#fff4e6,stroke:#e67700,color:#16181d
+    style H fill:#fff4e6,stroke:#e67700,color:#16181d
+    style O fill:#d3f9d8,stroke:#2f9e44,color:#16181d
 ```
 
 **Reach is narrowed, never widened.** A memory claiming `general` while naming specific projects is scoped to them by its own admission. A memory that would reach *nobody* is **refused rather than widened**, because granting the widest possible reach when the narrowest could not be determined is the opposite of what narrowing is for.
@@ -132,8 +132,8 @@ flowchart LR
     C -->|"names others, or several"| G
     G --> G2["external or local store<br/>reachable from every project"]
 
-    style P fill:#d3f9d8,stroke:#2f9e44
-    style G2 fill:#e7f5ff,stroke:#1971c2
+    style P fill:#d3f9d8,stroke:#2f9e44,color:#16181d
+    style G2 fill:#e7f5ff,stroke:#1971c2,color:#16181d
 ```
 
 An `external` store is cloned single-branch, blobless and sparse, so only the memory markdown materialises. The remote is probed **before** anything is written — a missing SSH key, a dropped VPN, revoked access and a wrong branch otherwise all present as one empty directory. The checkout is excluded through `.git/info/exclude` rather than the project's `.gitignore`, because where an engineer keeps their memories is their choice and does not belong in shared source.
@@ -164,9 +164,9 @@ flowchart TD
     Y --> Z["semantic rank INSIDE the visible set"]
     Z --> R["ranked: native before foreign, then specificity, then recency"]
 
-    style W fill:#ffe3e3,stroke:#c92a2a
-    style V fill:#d3f9d8,stroke:#2f9e44
-    style Y fill:#c5f6fa,stroke:#0c8599
+    style W fill:#ffe3e3,stroke:#c92a2a,color:#16181d
+    style V fill:#d3f9d8,stroke:#2f9e44,color:#16181d
+    style Y fill:#c5f6fa,stroke:#0c8599,color:#16181d
 ```
 
 **Default deny is load-bearing.** A caller with no identity sees only `general` — the safest reading of "I do not know who you are". A memory whose frontmatter will not parse is visible to nobody: a memory whose reach cannot be read has not declared a reach.
