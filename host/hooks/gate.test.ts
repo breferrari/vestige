@@ -29,6 +29,7 @@ const run = (payload: Record<string, unknown>, env: Record<string, string> = {})
 };
 const turn = (s = "t") => run({ hook_event_name: "UserPromptSubmit", session_id: s });
 const spawn = (desc: string, s = "t", env = {}) => run({ hook_event_name: "PreToolUse", session_id: s, tool_name: "Task", tool_input: { description: desc } }, env);
+const returned = (s = "t") => run({ hook_event_name: "PostToolUse", session_id: s, tool_name: "Task" });
 const searched = (s = "t") => run({ hook_event_name: "PostToolUse", session_id: s, tool_name: "mcp__vestige__search" });
 
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "gate-")); });
@@ -45,6 +46,7 @@ describe("the barrier", () => {
 	test("a new turn re-arms it — a stale search is not evidence", () => {
 		turn(); searched();
 		assert.equal(spawn("find out how auth works").trim(), "");
+		returned(); // the delegation completes before the user's next prompt
 		turn();
 		assert.match(spawn("find out how auth works"), /search|recall/i);
 	});
@@ -97,6 +99,7 @@ describe("budget", () => {
 		turn();
 		for (const _ of [1, 2, 3, 4]) spawn("find out how auth works");
 		assert.equal(spawn("find out how auth works").trim(), "");
+		for (const _ of [1, 2, 3, 4, 5]) returned();
 		turn();
 		assert.match(spawn("find out how auth works"), /search|recall/i);
 	});
@@ -107,5 +110,52 @@ describe("session isolation", () => {
 		turn("a"); turn("b"); searched("a");
 		assert.equal(spawn("find out how auth works", "a").trim(), "");
 		assert.match(spawn("find out how auth works", "b"), /search|recall/i);
+	});
+});
+
+describe("sub-agent prompts", () => {
+	/**
+	 * Found live, not in a unit test: a sub-agent's prompt arrives on this same
+	 * UserPromptSubmit hook carrying the parent's session id AND the parent's
+	 * transcript path, so nothing in the payload distinguishes it. Treated as a
+	 * new turn it silently voids both guarantees this hook exists to provide —
+	 * the parent's search is forgotten and the per-turn nudge budget resets, so
+	 * a delegating session can be nudged without limit.
+	 */
+	test("a prompt during an in-flight delegation does not forget the parent's search", () => {
+		turn(); searched();
+		assert.equal(spawn("find out how auth works").trim(), "", "a searched turn must not be nudged");
+		turn(); // the sub-agent's prompt, indistinguishable from the user's
+		assert.equal(spawn("find out how auth works").trim(), "", "the parent already searched; this must stay silent");
+	});
+
+	test("a prompt during an in-flight delegation does not refill the nudge budget", () => {
+		turn();
+		const before = [1, 2, 3, 4].map(() => spawn("find out how auth works").trim() !== "").filter(Boolean).length;
+		assert.equal(before, 3);
+		turn(); // sub-agent prompt
+		assert.equal(spawn("find out how auth works").trim(), "", "budget must not refill mid-delegation");
+	});
+
+	/**
+	 * The accepted cost of the fix above: a prompt sent while a delegation is
+	 * genuinely still in flight is indistinguishable from the sub-agent's, so the
+	 * barrier does not re-arm and the previous turn's search still counts.
+	 * Bounded by DELEGATION_TTL_MS. Written down as a test because a trade-off
+	 * nobody encoded is a bug the next session will "fix" back.
+	 */
+	test("a user prompt during a live delegation carries the previous turn's search", () => {
+		turn(); searched();
+		spawn("find out how auth works");
+		turn();
+		assert.equal(spawn("find out how auth works").trim(), "");
+	});
+
+	test("once the delegation returns, the next prompt does start a new turn", () => {
+		turn();
+		for (const _ of [1, 2, 3, 4]) spawn("find out how auth works");
+		for (const _ of [1, 2, 3, 4]) returned();
+		turn();
+		assert.match(spawn("find out how auth works"), /search|recall/i, "a genuinely new turn must nudge again");
 	});
 });

@@ -30,7 +30,17 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "mcp__vestige__.*",
+        "matcher": "mcp__.*vestige.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --experimental-strip-types --disable-warning=ExperimentalWarning \"${CLAUDE_PLUGIN_ROOT}/host/hooks/gate.ts\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Task|Agent",
         "hooks": [
           {
             "type": "command",

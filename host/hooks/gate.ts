@@ -19,11 +19,14 @@
  *
  * Modes via VESTIGE_GATE: advise (default) | enforce | off.
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, appendFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { vestigeHome } from "../../core/lib/stores.ts";
 
 const MAX_PER_TURN = 3;
+// A delegation whose PostToolUse never arrives (aborted, crashed) must not pin
+// the barrier open forever; past this the next prompt starts a fresh turn.
+const DELEGATION_TTL_MS = 10 * 60 * 1000;
 const DISCOVERY = /\b(find|search|investigate|explore|discover|look (in|into|at)|figure out|understand|research|locate|where is|how does)\b/i;
 
 try {
@@ -38,31 +41,61 @@ try {
 	const dir = join(vestigeHome(), "state");
 	const f = join(dir, `gate-${session}.json`);
 
-	let st: { turn: number; searched: boolean; nudges: number } = { turn: 0, searched: false, nudges: 0 };
+	let st: { turn: number; searched: boolean; nudges: number; depth: number; depthTs: number } = { turn: 0, searched: false, nudges: 0, depth: 0, depthTs: 0 };
 	try { st = { ...st, ...JSON.parse(readFileSync(f, "utf8")) }; } catch { /* fresh */ }
 	const save = () => { try { mkdirSync(dir, { recursive: true }); writeFileSync(f, JSON.stringify(st)); } catch { /* best effort */ } };
 
+	// Every decision this hook makes is invisible otherwise: a nudge that fired
+	// and a nudge that was never reached look identical from the state file, and
+	// so do a matcher that never matched and a tool that was never called.
+	const audit = (decision: string, extra: Record<string, unknown> = {}) => {
+		try {
+			mkdirSync(dir, { recursive: true });
+			const line = JSON.stringify({ ts: new Date().toISOString(), session, event, tool: payload.tool_name ?? null, decision, ...st, ...extra });
+			const logf = join(dir, "gate-log.jsonl");
+			// Bounded: a hook that grows a file forever is a hook that fills a disk.
+			try { if (statSync(logf).size > 512_000) { const keep = readFileSync(logf, "utf8").split("\n").slice(-2000).join("\n"); writeFileSync(logf, keep); } } catch { /* first write */ }
+			appendFileSync(logf, `${line}\n`);
+		} catch { /* best effort */ }
+	};
+
 	// A new turn resets the barrier: a search from three turns ago is not
 	// evidence that THIS delegation is informed.
-	if (event === "UserPromptSubmit") { st.turn++; st.searched = false; st.nudges = 0; save(); process.exit(0); }
+	if (event === "UserPromptSubmit") {
+		// A sub-agent's prompt arrives on this same hook, with the same session id
+		// and the same transcript path — nothing in the payload distinguishes it.
+		// Left alone it resets the barrier the parent's delegation just tripped,
+		// which silently voids both the per-turn nudge budget and the record that
+		// the parent already searched. So: a prompt during an in-flight delegation
+		// is the sub-agent's, and does not start a new turn.
+		const inFlight = st.depth > 0 && Date.now() - (st.depthTs || 0) < DELEGATION_TTL_MS;
+		if (inFlight) { audit("subagent-prompt-ignored"); process.exit(0); }
+		st.turn++; st.searched = false; st.nudges = 0; st.depth = 0; save();
+		audit("turn-reset");
+		process.exit(0);
+	}
 
 	// Record that the session actually consulted the store.
 	if (event === "PostToolUse") {
 		const tool = String(payload.tool_name ?? "");
-		if (/vestige.*(search|recall)|(search|recall).*vestige/i.test(tool)) { st.searched = true; save(); }
+		if (/^(Task|Agent)$/i.test(tool)) { st.depth = Math.max(0, st.depth - 1); save(); audit("delegation-returned"); process.exit(0); }
+		if (/vestige.*(search|recall)|(search|recall).*vestige/i.test(tool)) { st.searched = true; save(); audit("store-consulted"); }
+		else audit("post-ignored");
 		process.exit(0);
 	}
 
 	if (event !== "PreToolUse") process.exit(0);
 	const tool = String(payload.tool_name ?? "");
-	if (!/^(Task|Agent)$/i.test(tool)) process.exit(0);
-	if (st.searched) process.exit(0);
-	if (st.nudges >= MAX_PER_TURN) process.exit(0);
+	if (!/^(Task|Agent)$/i.test(tool)) { audit("skip-not-delegation"); process.exit(0); }
+	// Count the delegation before deciding, so every outcome marks it in flight.
+	st.depth++; st.depthTs = Date.now(); save();
+	if (st.searched) { audit("allow-already-searched"); process.exit(0); }
+	if (st.nudges >= MAX_PER_TURN) { audit("allow-budget-spent"); process.exit(0); }
 
 	const desc = `${payload.tool_input?.description ?? ""} ${payload.tool_input?.prompt ?? ""}`;
-	if (!DISCOVERY.test(desc)) process.exit(0);
+	if (!DISCOVERY.test(desc)) { audit("allow-not-discovery"); process.exit(0); }
 
-	st.nudges++; save();
+	st.nudges++; save(); audit("NUDGE");
 	const reason = "About to delegate discovery without consulting the memory store. Call `search` or `recall` first — the sub-agent starts without what the store already holds.";
 
 	if (mode === "enforce") {
