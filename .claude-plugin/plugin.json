@@ -14,7 +14,6 @@
     "recall",
     "codex"
   ],
-  "mcpServers": "./host/mcp.json",
   "hooks": "./host/hooks/hooks.json",
   "skills": "./host/skills/",
   "commands": [

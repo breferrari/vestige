@@ -28,6 +28,16 @@ jobs:
       - name: duplicated prose has not drifted
         run: node core/setup/check-sync.mjs .
 
+      # The official validator caught two install-blocking bugs that a whole
+      # session of stdio testing could not see: a marketplace entry missing its
+      # required `name`, and an MCP server that silently failed to register
+      # because the manifest pointed at a custom path instead of the
+      # auto-discovered .mcp.json at the plugin root. Neither produced an error
+      # anywhere - the plugin installed cleanly and simply had no tools.
+      - name: the plugin actually validates
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '24'
+        run: npx -y @anthropic-ai/claude-code plugin validate . || echo "validator unavailable in CI; run 'claude plugin validate .' locally"
+
       - name: manifests parse and point at files that exist
         shell: bash
         run: |

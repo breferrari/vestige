@@ -5,8 +5,10 @@
   },
   "plugins": [
     {
+      "name": "vestige",
       "source": ".",
       "description": "Durable, scoped memory for coding agents."
     }
-  ]
+  ],
+  "description": "Scoped, durable memory for coding agents - the base plugin."
 }
