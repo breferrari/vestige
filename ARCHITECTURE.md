@@ -2,6 +2,8 @@
 
 How a memory gets in, where it goes, and who can see it. Every box below is code that exists.
 
+Where each piece came from — MCS, obsidian-mind, or new here — is in [PROVENANCE.md](./PROVENANCE.md).
+
 The whole design rests on one property: **reach is declared once, and everything else is derived from it.** Storage location, visibility and ranking are all computed from the same declaration, so they cannot drift apart.
 
 ---

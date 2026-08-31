@@ -71,13 +71,13 @@ Stated plainly, because a security claim without its limits is worse than none: 
 
 ## Prior art
 
-Vestige is not a from-scratch design and does not pretend to be.
+Vestige is not a from-scratch design and does not pretend to be. It takes a **distribution model** from one system and a **reach model** from another, and most of what is new exists because combining them exposed a gap that only appears when both are present.
 
-The **shared-pool distribution model** — memories in their own git repository, sparse-cloned per checkout, synced at session boundaries, with deletions held back for review — comes from [`mcs-cli/memory`](https://github.com/mcs-cli/memory) and [`mcs-cli/shared-memories`](https://github.com/mcs-cli/shared-memories) by Bruno Guidolim. So do several ideas worth stating individually: gating discovery behind a lookup, a skill that decides what qualifies rather than capturing everything, an audit that treats DROP as success, probing a remote before touching the filesystem, and keeping duplicated prose honest with sync-checked blocks.
+- The shared-pool distribution model, the discovery gate, the capture and audit skills, and the deletion-review default come from [`mcs-cli/memory`](https://github.com/mcs-cli/memory) and [`mcs-cli/shared-memories`](https://github.com/mcs-cli/shared-memories) by Bruno Guidolim.
+- The facet model, the write contract and the scope narrowing come from [obsidian-mind](https://github.com/breferrari/obsidian-mind) — `core/lib/om/` is its code, vendored rather than reimplemented.
+- What is new here is chiefly that **reach computes storage**, the filter-before-rank retrieval over a per-caller view, the write-time content gate, and a host-agnostic core that also runs on Codex.
 
-The **facet-based reach model and the write contract** — scope narrowing with an audit trail, the epistemic contract that caps confidence on a claim that outruns one session, atomic non-clobbering writes — come from [obsidian-mind](https://github.com/breferrari/obsidian-mind).
-
-What Vestige contributes is the combination, plus reach as the thing that computes storage.
+**[PROVENANCE.md](./PROVENANCE.md) says which is which, component by component**, so nobody has to guess — including the people whose work it builds on.
 
 ## Maturity
 
