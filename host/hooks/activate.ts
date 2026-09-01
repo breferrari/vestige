@@ -29,6 +29,16 @@ try {
 	try { seen = JSON.parse(readFileSync(stateFile, "utf8")); } catch { /* first prompt of the session */ }
 
 	const parts: string[] = [];
+	// VESTIGE_PROTOCOL=off suppresses the standing contract while leaving the
+	// tools, the hooks and the state file exactly as they are. That is the only
+	// way to ask whether the TEXT changes behaviour: comparing "plugin
+	// installed" against "plugin absent" confounds the instruction with the
+	// availability of the tools it talks about.
+	// It suppresses the per-turn signals too. They are instruction text with the
+	// same job, so leaving them on would put half the treatment in the control
+	// cell and understate whatever the protocol is worth.
+	const protocolOff = (process.env.VESTIGE_PROTOCOL ?? "") === "off";
+	if (protocolOff) process.exit(0);
 	if (!seen.protocol) { parts.push(PROTOCOL); seen.protocol = true; }
 	for (const s of signalsFor(prompt)) {
 		if (seen[s.id]) continue;
