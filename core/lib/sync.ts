@@ -20,7 +20,22 @@ import { scan, configure } from "./sanitize.ts";
 import { activeStores } from "./stores.ts";
 
 const MODE = process.argv[2] === "pull" ? "pull" : "push";
-const ATTEMPTS = Number(process.env.VESTIGE_PUSH_ATTEMPTS ?? 5);
+/**
+ * Retry budget, validated.
+ *
+ * `Number("5x")` is NaN, and `attempt <= NaN` is false on the first evaluation
+ * — so the loop below never runs at all. That is worse than losing the retry:
+ * there is no push either, and the memories sit committed and local with
+ * nothing said. A typo in an environment variable should not be able to switch
+ * syncing off silently.
+ */
+const ATTEMPTS = (() => {
+	const raw = Number(process.env.VESTIGE_PUSH_ATTEMPTS ?? 5);
+	return Number.isInteger(raw) && raw >= 1 ? raw : 5;
+})();
+
+/** A failure no number of retries can fix. */
+const PERMANENT = /authentication failed|permission denied|access denied|could not read (username|password)|repository not found|does not appear to be a git repository/i;
 
 if (process.env.VESTIGE_TICKET_KEYS) {
 	configure({ ticketKeys: process.env.VESTIGE_TICKET_KEYS.split(",").map((s) => s.trim()).filter(Boolean) });
@@ -31,6 +46,16 @@ const git = (cwd: string, args: string[]): string | null => {
 		return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
 	} catch {
 		return null;
+	}
+};
+
+/** Like `git`, but keeps stderr — needed to tell contention from credentials. */
+const gitErr = (cwd: string, args: string[]): { ok: boolean; stderr: string } => {
+	try {
+		execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+		return { ok: true, stderr: "" };
+	} catch (e: any) {
+		return { ok: false, stderr: String(e?.stderr ?? e?.message ?? "") };
 	}
 };
 
@@ -197,15 +222,30 @@ for (const store of stores()) {
 	// survivors on a loaded machine, which measures the scheduler rather than the
 	// software, and reproduced across a 14x range on one afternoon.
 	for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-		const pulled = git(store, ["pull", "--rebase", "--autostash", "-q"]);
-		if (pulled !== null) {
+		// The pull is where an unreachable remote surfaces FIRST — classifying only
+		// the push left a dead remote spinning through every attempt on the one
+		// call that can never succeed.
+		const pull = gitErr(store, ["pull", "--rebase", "--autostash", "-q"]);
+		if (!pull.ok && PERMANENT.test(pull.stderr)) {
+			console.log(`vestige: sync stopped — ${pull.stderr.split("\n").find((l) => l.trim()) ?? "remote unreachable"}. Retrying cannot fix this.`);
+			break;
+		}
+		if (pull.ok) {
 			// Push with an explicit refspec and set upstream. A bare `git push`
 			// requires a configured upstream and FAILS without one — and because
 			// every git call here is deliberately quiet, that failure was
 			// invisible: memories committed locally and never left the machine,
 			// forever, with no error anywhere. A store that reaches this state
 			// looks exactly like a store nobody is writing to.
-			if (git(store, ["push", "-q", "-u", "origin", "HEAD"]) !== null) break;
+			const push = gitErr(store, ["push", "-q", "-u", "origin", "HEAD"]);
+			if (push.ok) break;
+			// Retry contention, never credentials: an auth or permission failure
+			// fails identically every attempt, and retrying only spends the turn
+			// boundary before reporting the same thing.
+			if (PERMANENT.test(push.stderr)) {
+				console.log(`vestige: sync stopped — ${push.stderr.split("\n")[0]?.trim() || "push refused"}. Retrying cannot fix this.`);
+				break;
+			}
 		} else {
 			const status = git(store, ["status", "--porcelain"]);
 			if (status === null || existsSync(join(store, ".git", "rebase-merge")) || existsSync(join(store, ".git", "rebase-apply"))) {

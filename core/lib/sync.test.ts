@@ -118,3 +118,36 @@ describe("the product repository is not a memory store", () => {
 		assert.equal(git(prodRemote, "rev-list", "--count", "main"), "1", "and it must certainly not push it");
 	});
 });
+
+describe("the retry budget", () => {
+	/**
+	 * `Number("5x")` is NaN and `attempt <= NaN` is false immediately, so the
+	 * whole loop — pull AND push — was skipped. A typo in an environment
+	 * variable switched syncing off with nothing said, which is the same class
+	 * of silent failure the retry exists to remove.
+	 */
+	test("a non-numeric attempt budget still pushes", () => {
+		memory("written-with-a-bad-budget");
+		runSync({ VESTIGE_PUSH_ATTEMPTS: "5x" });
+		assert.ok(remoteFiles().includes("written-with-a-bad-budget.md"), "an invalid budget must fall back, not disable the push");
+	});
+
+	test("a zero or negative budget still pushes", () => {
+		memory("written-with-zero");
+		runSync({ VESTIGE_PUSH_ATTEMPTS: "0" });
+		assert.ok(remoteFiles().includes("written-with-zero.md"));
+	});
+});
+
+describe("failures retrying cannot fix", () => {
+	test("an unreachable remote is reported once, not retried to exhaustion", () => {
+		memory("doomed");
+		git(store, "remote", "set-url", "origin", join(tmpdir(), "not-a-repo-at-all"));
+		const started = Date.now();
+		const out = runSync({ VESTIGE_PUSH_ATTEMPTS: "5" });
+		const elapsed = Date.now() - started;
+		assert.match(out, /Retrying cannot fix this/i);
+		// Five attempts with backoff would spend seconds; short-circuiting is fast.
+		assert.ok(elapsed < 4000, `expected an early exit, took ${elapsed}ms`);
+	});
+});
