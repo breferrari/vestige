@@ -202,13 +202,15 @@ flowchart TD
 
 ## Which models run, and which ones do not
 
-Retrieval is not one model. qmd holds three model slots — embed, generate and rerank — and **Vestige uses only the first**. Which ones run explains every latency number above, so the choice is recorded here; the models themselves, their sizes and how to change them are [qmd's](https://github.com/tobi/qmd) to document, and restating them here would only go stale the next time it picks a different one.
+Retrieval is not one model. [qmd](https://github.com/tobi/qmd) holds three model slots and **Vestige uses only the first**. Which ones run explains every latency number above, so both the models and the choice are recorded here — the models are qmd's to change, and if these fall out of date the fix is to update this table:
 
-| slot | used | why |
-|---|---|---|
-| embed | **yes** | one vector per query, one per chunk at index time. The lexical half of the query costs no model at all — BM25 over an index — so a warm query is 14 ms |
-| generate | no | the auto-expansion, HyDE included. ~500 ms per query, and a *hypothetical document* is generated text, so it lands in the ranking and moves between runs |
-| rerank | no | byte-identical hit lists on all 64 queries, for 2.7× the latency |
+| slot | model, as qmd configures it | used | why |
+|---|---|---|---|
+| embed | `embeddinggemma-300M` (Q8_0, ~300M params) | **yes** | one vector per query, one per chunk at index time. The lexical half of the query costs no model at all — BM25 over an index — so a warm query is 14 ms |
+| generate | `qmd-query-expansion-1.7B` (Q4_K_M) | no | the auto-expansion, HyDE included. ~500 ms per query, and a *hypothetical document* is generated text, so it lands in the ranking and moves between runs |
+| rerank | `Qwen3-Reranker-0.6B` (Q8_0) | no | byte-identical hit lists on all 64 queries, for 2.7× the latency |
+
+Written out, the arithmetic stops being surprising: a 1.7B generative model and a 600M cross-encoder were running on every search, and a 300M embedder was doing the part that produced the answer.
 
 Both refusals are measurements rather than preferences. Skipping expansion took rank-1 from 0.979 (sd 0.018) to 1.000 (sd 0.000) and a warm query from 543 ms to 14 ms — roughly 97% of what used to be called "search latency" was a model writing a paragraph nobody read.
 
