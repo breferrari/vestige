@@ -27,8 +27,10 @@
 import { execFileSync } from "node:child_process";
 import { runQmd, resolveQmdEntry } from "../setup/qmd.ts";
 import { ensureIndex } from "./index-view.ts";
+import { markSuperseded, addToFrontmatterList } from "./om/memory-supersede.ts";
 import { sessionQuery } from "./qmd-session.ts";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { capture as rawCapture, readPool, visibleTo, rankBySpecificity, isForeign, type PoolEntry, type CaptureResult } from "./memory.ts";
 import { visibilityReason, isVisibleTo } from "./om/memory-recall.ts";
 import { activeStores, currentProject, ensureStore, loadConfig, routeFor, storePath, type ScopeName, type StoreConfig } from "./stores.ts";
@@ -39,6 +41,10 @@ export interface RememberResult extends CaptureResult {
 	/** Which configured store took it, by name. */
 	readonly tier: string | null;
 	readonly store: string | null;
+	/** Memories this write marked as superseded, by filename. */
+	readonly superseded?: readonly string[];
+	/** Memories this write cross-linked, by filename. */
+	readonly linked?: readonly string[];
 }
 
 /**
@@ -48,6 +54,32 @@ export interface RememberResult extends CaptureResult {
  * again inside `capture` which is the authority. They agree because both call
  * `validateMemory`; the dry run here only reads the result.
  */
+/**
+ * Resolve loose references — a title, a filename, a relative path — to files in
+ * this store, and apply an edit to each.
+ *
+ * Callers name a memory the way a person would, and a reference that matches
+ * nothing is reported rather than thrown: failing a good write because one
+ * cross-reference did not resolve loses the memory to protect a link.
+ */
+function markAll(storePath: string, refs: unknown, apply: (rel: string) => { ok: boolean }): string[] {
+	if (!Array.isArray(refs) || !refs.length) return [];
+	const names = readdirSync(storePath).filter((f) => f.endsWith(".md"));
+	const done: string[] = [];
+	for (const raw of refs) {
+		if (typeof raw !== "string" || !raw.trim()) continue;
+		const want = raw.trim().toLowerCase().replace(/\.md$/, "");
+		const hit = names.find((n) => n.toLowerCase().replace(/\.md$/, "") === want)
+			?? names.find((n) => n.toLowerCase().includes(want))
+			?? names.find((n) => {
+				try { return new RegExp(`^#\\s*${want.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "im").test(readFileSync(join(storePath, n), "utf8")); } catch { return false; }
+			});
+		if (!hit) continue;
+		try { if (apply(hit).ok) done.push(hit); } catch { /* one bad reference must not fail the write */ }
+	}
+	return done;
+}
+
 export function remember(input: MemoryInput, opts: { cwd?: string; now?: Date } = {}): RememberResult {
 	const cwd = opts.cwd ?? process.cwd();
 	const origin = currentProject(cwd);
@@ -75,7 +107,24 @@ export function remember(input: MemoryInput, opts: { cwd?: string; now?: Date } 
 	}
 
 	const r = rawCapture(ready.path, input, { now: opts.now, origin });
-	return { ...r, tier: r.ok ? target.name : null, store: r.ok ? ready.path : null };
+	if (!r.ok || !r.rel) return { ...r, tier: null, store: null, superseded: [], linked: [] };
+
+	// A store fills with twins when the only way to record a better version of a
+	// lesson is to write it again. Superseding marks the old one and keeps it —
+	// what was believed at the time is evidence, and deleting it loses the fact
+	// that it changed. `related` is the weaker link, for a memory that sits
+	// beside another without replacing it, and it is written on BOTH files
+	// because a one-way link is invisible from the side that needs it.
+	const title = String(r.value?.title ?? "");
+	const superseded = markAll(ready.path, input?.supersedes, (rel) => markSuperseded(ready.path, rel, title));
+	const linked = markAll(ready.path, input?.related, (rel) => {
+		const full = join(ready.path, rel);
+		const edit = addToFrontmatterList(readFileSync(full, "utf8"), "related", title);
+		if (edit.changed) writeFileSync(full, edit.text);
+		return { ok: edit.changed };
+	});
+
+	return { ...r, tier: target.name, store: ready.path, superseded, linked };
 }
 
 export interface RecallHit {

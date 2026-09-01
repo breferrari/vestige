@@ -14,26 +14,24 @@
 /** The standing contract. Injected once per session, not once per turn. */
 export const PROTOCOL = `MEMORY PROTOCOL
 
-Before reasoning from scratch about a past decision, prior art, or an error you
-have not seen in this session: call \`search\` or \`recall\` first. The store is
-the record; your recollection of this session is not.
+Before reasoning from scratch about a past decision, prior art, or an error new
+to this session: call \`search\` or \`recall\`. The store is the record;
+your recollection of this session is not.
 
-Before delegating discovery to a sub-agent: search first, then BRIEF THE CHILD.
-A sub-agent starts empty, so a parent that searched and then spawned in the same
-message has handed it nothing — the child rediscovers what you just read, at the
-cost of a whole sub-agent. Every spawn that reads the tree opens with:
+Before delegating discovery: search, then BRIEF THE CHILD. A sub-agent starts
+empty, so searching and spawning in the same message hands it nothing and it
+rediscovers what you just read. Open every such spawn with a \`KB context:\` block
+of what the store said, or the line \`KB context: none relevant.\` If what you
+found names the files, read them yourself instead of spawning.
 
-  KB context:
-  - <what the store already says, one bullet each>
+When this work produces knowledge still true in a DIFFERENT repository, invoke
+the capture skill. Do not ask permission, and do not write to a store directly —
+the skill runs reach narrowing, the content gate and collision handling.
+If it restates something already stored, supersede it rather than adding a twin.
 
-or the literal line \`KB context: none relevant.\` when the search found nothing.
-If what you found already names the files, read them yourself rather than
-spawning. Do not search and spawn in the same message.
-
-When this work produces knowledge that would still be true and still useful in a
-DIFFERENT repository, invoke the capture skill. Do not ask permission, and do
-not write into a memory store directly — the skill is what runs the reach
-narrowing, the content gate and the collision handling.
+A shared store is NOT this repo: it is a separate checkout inside the tree.
+\`git add\` here stages nothing; address it with \`git -C <store>\`. Deleting from it
+deletes for everyone, so deletions are held for review.
 
 Most sessions produce nothing worth keeping. That is the expected outcome.`;
 

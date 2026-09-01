@@ -163,7 +163,10 @@ export function capture(
 
 	// DEFECT 1 — mark, do not block, a claim that reaches beyond its origin.
 	const foreign = Boolean(origin) && v.value.projects.length > 0 && !v.value.projects.some((p) => p.toLowerCase() === origin!.toLowerCase());
-	const rendered = withForeignMarker(mcsCompat(renderMemory(v.value, ctx.links ?? []), v.value), foreign);
+	const rendered = withRelated(
+		withKind(withForeignMarker(mcsCompat(renderMemory(v.value, ctx.links ?? []), v.value), foreign), input?.kind),
+		Array.isArray(input?.related) ? (input.related as unknown[]).filter((x): x is string => typeof x === "string") : [],
+	);
 
 	// Fail closed. A contaminated memory is quarantined, never pushed, and
 	// never silently dropped: the file is written where the author can still see
@@ -211,6 +214,33 @@ export function capture(
  * adoptable by a team already running the shipped packs. Costs one line and
  * keeps the corpus legible to anything that predates the facet model.
  */
+/**
+ * Stamp the genre.
+ *
+ * A `learning` records what bit and how it was fixed; a `decision` records what
+ * was chosen and what was given up. Agents write better when they know which
+ * blank they are filling, and an audit can list one genre without reading
+ * bodies. Retrieval does NOT use this — there is no second index and no second
+ * store — which is why it is a field and not a filename convention: the prefix
+ * scheme it replaces made the filename carry meaning the pool name already
+ * needed for collision handling.
+ *
+ * Unknown values fall back rather than refusing. A write rejected over a label
+ * loses the memory, and the label is the least valuable thing in it.
+ */
+export function withKind(rendered: string, kind: unknown): string {
+	const k = String(kind ?? "learning").toLowerCase();
+	const use = k === "decision" ? "decision" : "learning";
+	return rendered.replace(/^(scope: .+)$/m, `$1\nkind: ${use}`);
+}
+
+/** Record sibling memories this one sits beside, without claiming to replace them. */
+export function withRelated(rendered: string, related: readonly string[]): string {
+	if (!related.length) return rendered;
+	const list = related.map((r) => JSON.stringify(r)).join(", ");
+	return rendered.replace(/^(scope: .+)$/m, `$1\nrelated: [${list}]`);
+}
+
 /** Stamp `foreign_origin: true` into frontmatter so the read side can rank on it. */
 export function withForeignMarker(rendered: string, foreign: boolean): string {
 	if (!foreign) return rendered;

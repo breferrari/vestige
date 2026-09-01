@@ -65,7 +65,22 @@ Name every project the lesson applies to in `projects` — the field is a list p
 
 ## Steps
 
-1. **Search first.** Call `search` or `recall` for what you are about to write. If it already exists, do not duplicate it — if your version is better, say so and supersede rather than adding a near-twin.
-2. **Judge it** against the sections above. Most sessions stop here, and that is correct.
-3. **Write it** with `remember`, choosing reach deliberately.
-4. **Read what came back.** The tool reports what it changed: a narrowed scope, a capped confidence, a quarantined file. Those are not noise — a narrowed scope means your reach claim was wider than your own `projects` list, and a quarantine means the memory carried something that must not leave this machine.
+Do these in order. Step 1 is the one that gets skipped, which is why step 5 exists.
+
+1. **Search first.** Call `search` or `recall` for what you are about to write.
+2. **Take the branch the result dictates**, and there are only four:
+   - **Already captured, nothing to add** — stop. This is a success, not a failure.
+   - **Extends an existing memory** — write the better version with `supersedes: [<the old one>]`. The old memory is marked and kept, never deleted: what was believed at the time is evidence that it changed.
+   - **Related but distinct** — write it with `related: [<the sibling>]`. The link is written on both files.
+   - **Genuinely new** — write it.
+3. **Judge it** against the sections above. Most sessions stop here, and that is correct.
+4. **Write it** with `remember`, choosing reach deliberately and setting `kind` to `learning` or `decision`.
+5. **Print the receipt, in one line, before you stop:**
+
+   ```
+   KB search: "<query>" -> <n> hits, <what they covered> -> <branch taken>
+   ```
+
+   This is not ceremony. Step 1 is invisible when it is skipped — a session that never searched and a session that searched and found nothing produce identical output, and the store fills with near-twins either way. The receipt makes the branch visible, which is the only thing that makes skipping it noticeable.
+
+6. **Read what came back.** The tool reports what it changed: a narrowed scope, a capped confidence, a quarantined file, and which memories it superseded or linked. Those are not noise — a narrowed scope means your reach claim was wider than your own `projects` list, and a quarantine means the memory carried something that must not leave this machine.
