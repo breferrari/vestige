@@ -17,6 +17,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync } from "no
 import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { scan, configure } from "./sanitize.ts";
+import { activeStores } from "./stores.ts";
 
 const MODE = process.argv[2] === "pull" ? "pull" : "push";
 const ATTEMPTS = Number(process.env.VESTIGE_PUSH_ATTEMPTS ?? 5);
@@ -38,11 +39,27 @@ const sleep = (ms: number) => {
 	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 };
 
+/**
+ * The stores to sync, from the CONFIGURATION — not from a path guess.
+ *
+ * This function used to hardcode `~/.claude/vestige/memories` and
+ * `<repo>/.claude/memories`. Both moved when the store became data belonging to
+ * the repo rather than config belonging to one agent, and this was never
+ * updated: sync walked two directories nothing had written to since, found
+ * nothing, and exited 0. A sync that syncs an empty directory reports success
+ * and is indistinguishable from a session that produced no memories.
+ *
+ * Worse, a path guess cannot see an `external` store at all — which is the one
+ * that actually reaches a team, so the entire sharing feature was dead.
+ */
 function stores(): string[] {
-	const out: string[] = [process.env.VESTIGE_GLOBAL ?? join(homedir(), ".claude", "vestige", "memories")];
-	const root = git(process.cwd(), ["rev-parse", "--show-toplevel"]);
-	if (root) out.push(join(root, ".claude", "memories"));
-	return out.filter((d) => existsSync(d));
+	const out: string[] = [];
+	try {
+		for (const { path } of activeStores(process.cwd())) out.push(path);
+	} catch { /* fall back below rather than sync nothing */ }
+	// VESTIGE_GLOBAL remains an explicit override for a caller that knows better.
+	if (process.env.VESTIGE_GLOBAL) out.push(process.env.VESTIGE_GLOBAL);
+	return [...new Set(out)].filter((d) => existsSync(d));
 }
 
 /**
@@ -109,7 +126,26 @@ for (const store of stores()) {
 	// someone deliberately approves them. `VESTIGE_SYNC=full` pushes deletions
 	// too, for the person actually running an audit. Taken from MCS, which
 	// defaults the same way for the same reason.
-	const syncMode = process.env.VESTIGE_SYNC === "full" ? "full" : "auto";
+	const requested = String(process.env.VESTIGE_SYNC ?? "");
+	const syncMode = requested === "full" || requested === "review" ? requested : "auto";
+
+	// `review`: nothing is staged and nothing is pushed, including ADDITIONS.
+	// Parking deletions is a safety default; review mode is a team workflow — a
+	// lead sees incoming lessons before they become everybody else's context.
+	// The proposals stay in the working tree, which is where /approve-memories
+	// picks them up.
+	if (syncMode === "review") {
+		const pending = (git(store, ["status", "--porcelain", "--", "."]) ?? "")
+			.split("\n").map((l) => l.trim()).filter(Boolean);
+		if (pending.length) {
+			console.log(`vestige: ${pending.length} memory change(s) awaiting review in ${store} — nothing was pushed.`);
+			for (const p of pending.slice(0, 10)) console.log(`  ${p}`);
+			if (pending.length > 10) console.log(`  ...and ${pending.length - 10} more`);
+			console.log("  Run /approve-memories to stage, commit and publish them.");
+		}
+		continue;
+	}
+
 	if (syncMode === "full") {
 		git(store, ["add", "-A", "--", "."]);
 	} else {
@@ -129,16 +165,24 @@ for (const store of stores()) {
 			console.log(`vestige: ${deleted.length} deleted memor${deleted.length === 1 ? "y" : "ies"} held back from the shared store, pending review:`);
 			for (const d of deleted.slice(0, 10)) console.log(`  ${d}`);
 			if (deleted.length > 10) console.log(`  ...and ${deleted.length - 10} more`);
-			console.log("  Deleting for yourself is not deleting for the team. Run the audit skill, or set VESTIGE_SYNC=full to publish these removals.");
+			console.log("  Deleting for yourself is not deleting for the team. Run the audit skill, or set VESTIGE_SYNC=full to publish these removals.")
+			console.log("  For a team where additions are reviewed too, set VESTIGE_SYNC=review.");
 		}
 	}
 	const staged = execFileSync("git", ["diff", "--cached", "--name-only"], { cwd: store, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 	if (!staged) continue;
 	git(store, ["commit", "-qm", `vestige: capture ${new Date().toISOString()}`]);
 
-	// Bounded retry with full jitter. One pull and one push loses almost every
-	// race under simultaneous writers: 21 of 845 memories landed, 98 of 100
-	// engineers permanently stalled. With retry, 492.
+	// Bounded retry with full jitter. A single attempt loses almost every race
+	// under simultaneous writers, and the loss is not probabilistic: in a
+	// barrier-synchronised race exactly ONE writer lands regardless of how many
+	// are pushing — 1 of 5, 1 of 10, 1 of 20, with zero variance over three runs
+	// each. Bounded retry lands all of them.
+	//
+	// An earlier version of this comment cited 21 of 845 and 98 of 100 stalled.
+	// Those numbers were withdrawn: they came from spawning writers and counting
+	// survivors on a loaded machine, which measures the scheduler rather than the
+	// software, and reproduced across a 14x range on one afternoon.
 	for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
 		const pulled = git(store, ["pull", "--rebase", "--autostash", "-q"]);
 		if (pulled !== null) {
