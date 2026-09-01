@@ -62,21 +62,34 @@ export interface RememberResult extends CaptureResult {
  * nothing is reported rather than thrown: failing a good write because one
  * cross-reference did not resolve loses the memory to protect a link.
  */
-function markAll(storePath: string, refs: unknown, apply: (rel: string) => { ok: boolean }): string[] {
+function markAll(storePath: string, refs: unknown, apply: (rel: string) => { ok: boolean }, warnings: string[] = []): string[] {
 	if (!Array.isArray(refs) || !refs.length) return [];
 	const names = readdirSync(storePath).filter((f) => f.endsWith(".md"));
 	const done: string[] = [];
+	const ambiguous: string[] = [];
 	for (const raw of refs) {
 		if (typeof raw !== "string" || !raw.trim()) continue;
 		const want = raw.trim().toLowerCase().replace(/\.md$/, "");
-		const hit = names.find((n) => n.toLowerCase().replace(/\.md$/, "") === want)
-			?? names.find((n) => n.toLowerCase().includes(want))
-			?? names.find((n) => {
-				try { return new RegExp(`^#\\s*${want.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "im").test(readFileSync(join(storePath, n), "utf8")); } catch { return false; }
-			});
-		if (!hit) continue;
+		// Resolve in tiers, and REFUSE AN AMBIGUOUS ONE. The loose tiers used to
+		// take the first match, so `supersedes: ["retry"]` would mark whichever
+		// memory happened to sort first — silently, and on a write that reports
+		// success. Marking the wrong memory as superseded is worse than not
+		// marking one: the correct memory stays live and a good one sinks, and
+		// nothing in the output says which happened.
+		const exact = names.filter((n) => n.toLowerCase().replace(/\.md$/, "") === want);
+		const substr = exact.length ? [] : names.filter((n) => n.toLowerCase().includes(want));
+		const byTitle = exact.length || substr.length ? [] : names.filter((n) => {
+			try { return new RegExp(`^#\\s*${want.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "im").test(readFileSync(join(storePath, n), "utf8")); } catch { return false; }
+		});
+		const candidates = exact.length ? exact : substr.length ? substr : byTitle;
+		if (candidates.length !== 1) {
+			if (candidates.length > 1) ambiguous.push(raw.trim());
+			continue;
+		}
+		const hit = candidates[0]!;
 		try { if (apply(hit).ok) done.push(hit); } catch { /* one bad reference must not fail the write */ }
 	}
+	if (ambiguous.length) warnings.push(`ambiguous reference(s), nothing was marked: ${ambiguous.join(", ")} — name the file, or use the full title`);
 	return done;
 }
 
@@ -116,15 +129,16 @@ export function remember(input: MemoryInput, opts: { cwd?: string; now?: Date } 
 	// beside another without replacing it, and it is written on BOTH files
 	// because a one-way link is invisible from the side that needs it.
 	const title = String(r.value?.title ?? "");
-	const superseded = markAll(ready.path, input?.supersedes, (rel) => markSuperseded(ready.path, rel, title));
+	const refWarnings: string[] = [];
+	const superseded = markAll(ready.path, input?.supersedes, (rel) => markSuperseded(ready.path, rel, title), refWarnings);
 	const linked = markAll(ready.path, input?.related, (rel) => {
 		const full = join(ready.path, rel);
 		const edit = addToFrontmatterList(readFileSync(full, "utf8"), "related", title);
 		if (edit.changed) writeFileSync(full, edit.text);
 		return { ok: edit.changed };
-	});
+	}, refWarnings);
 
-	return { ...r, tier: target.name, store: ready.path, superseded, linked };
+	return { ...r, warnings: [...(r.warnings ?? []), ...refWarnings], tier: target.name, store: ready.path, superseded, linked };
 }
 
 export interface RecallHit {

@@ -55,7 +55,20 @@ const sleep = (ms: number) => {
 function stores(): string[] {
 	const out: string[] = [];
 	try {
-		for (const { path } of activeStores(process.cwd())) out.push(path);
+		for (const { config, path } of activeStores(process.cwd())) {
+			// NEVER a `repo` store. Its memories live inside the product
+			// repository, so committing them means committing to the user's own
+			// repo — and pushing them means pushing the user's branch. Verified
+			// the hard way: with `repo` included, a Stop hook moved HEAD on a
+			// product checkout and pushed it to origin, unasked.
+			//
+			// That is also the design: `repo` memories travel with the code and
+			// are reviewed in its pull requests, which means a PERSON commits
+			// them alongside the change they belong to. A hook that commits into
+			// someone's working repository is not a sync, it is a surprise.
+			if (config.kind === "repo") continue;
+			out.push(path);
+		}
 	} catch { /* fall back below rather than sync nothing */ }
 	// VESTIGE_GLOBAL remains an explicit override for a caller that knows better.
 	if (process.env.VESTIGE_GLOBAL) out.push(process.env.VESTIGE_GLOBAL);

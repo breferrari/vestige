@@ -84,3 +84,37 @@ describe("modes", () => {
 		assert.ok(!remoteFiles().includes("seed.md"));
 	});
 });
+
+describe("the product repository is not a memory store", () => {
+	/**
+	 * A `repo` store lives INSIDE the product repository. Syncing it means
+	 * committing to the user's own repo and pushing their branch — from a Stop
+	 * hook, unasked. Confirmed by running it: HEAD moved and the commit reached
+	 * origin. The design already said a person commits these alongside the change
+	 * they belong to; the sync path simply did not know that.
+	 */
+	test("sync never commits or pushes a repo-kind store", () => {
+		const prod = mkdtempSync(join(tmpdir(), "prod-"));
+		const prodRemote = mkdtempSync(join(tmpdir(), "prod-remote-"));
+		execFileSync("git", ["init", "-q", "--bare", prodRemote]);
+		execFileSync("git", ["init", "-q", "-b", "main", prod]);
+		git(prod, "config", "user.email", "t@t");
+		git(prod, "config", "user.name", "t");
+		writeFileSync(join(prod, "app.js"), "console.log(1)\n");
+		git(prod, "add", "-A"); git(prod, "commit", "-qm", "product code");
+		git(prod, "remote", "add", "origin", prodRemote);
+		git(prod, "push", "-q", "-u", "origin", "main");
+		const headBefore = git(prod, "rev-parse", "HEAD");
+
+		mkdirSync(join(prod, ".vestige", "memories"), { recursive: true });
+		writeFileSync(join(prod, ".vestige", "memories", "a.md"), "---\nscope: project\n---\n\n# a\n\nbody\n");
+
+		execFileSync(process.execPath, ["--experimental-strip-types", "--disable-warning=ExperimentalWarning", SYNC, "push"], {
+			cwd: prod, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+			env: { ...process.env, VESTIGE_HOME: home },
+		});
+
+		assert.equal(git(prod, "rev-parse", "HEAD"), headBefore, "a hook must not move HEAD in someone's product repository");
+		assert.equal(git(prodRemote, "rev-list", "--count", "main"), "1", "and it must certainly not push it");
+	});
+});

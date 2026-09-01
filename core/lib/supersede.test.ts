@@ -74,3 +74,31 @@ describe("related", () => {
 		assert.match(readPoolFile(first.rel), /Checkpoint after each batch/, "a one-way link is invisible from the side that needs it");
 	});
 });
+
+describe("ambiguous references", () => {
+	/**
+	 * The loose match used to take whichever file sorted first, on a write that
+	 * reported success. Marking the WRONG memory superseded is worse than marking
+	 * none: the stale one stays live, a good one sinks, and the output says
+	 * neither. Refusing is the only safe answer when the reference fits two.
+	 */
+	test("a reference matching two memories marks NEITHER, and says so", async () => {
+		await write({ title: "Retry with jitter on write conflicts", body, scope: "project", projects: ["r"], confidence: "inferred" });
+		await write({ title: "Retry with a bounded attempt count", body, scope: "project", projects: ["r"], confidence: "inferred" });
+		const before = poolFiles().map((f) => readPoolFile(f));
+		const r = await write({ title: "Retry policy, consolidated", body, scope: "project", projects: ["r"], confidence: "inferred", supersedes: ["retry"] });
+
+		assert.equal(r.ok, true, "an ambiguous cross-reference must not fail the write");
+		assert.deepEqual(r.superseded, [], "guessing between two candidates is how the wrong memory gets sunk");
+		assert.ok(r.warnings.some((w: string) => /ambiguous/i.test(w)), "silently doing nothing is as bad as silently guessing");
+		assert.equal(before.filter((t) => /superseded_by/i.test(t)).length, 0);
+		assert.equal(poolFiles().filter((f) => /superseded_by/i.test(readPoolFile(f))).length, 0, "no memory may be marked when the reference was ambiguous");
+	});
+
+	test("an exact filename still resolves even when a substring would be ambiguous", async () => {
+		const a = await write({ title: "Retry with jitter on write conflicts", body, scope: "project", projects: ["r"], confidence: "inferred" });
+		await write({ title: "Retry with a bounded attempt count", body, scope: "project", projects: ["r"], confidence: "inferred" });
+		const r = await write({ title: "Retry policy, consolidated", body, scope: "project", projects: ["r"], confidence: "inferred", supersedes: [a.rel] });
+		assert.deepEqual(r.superseded, [a.rel], "precision must still work where a guess would not");
+	});
+});
