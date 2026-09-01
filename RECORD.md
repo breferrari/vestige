@@ -137,20 +137,46 @@ It was **2,748 ms** when first measured, and **543 ms** after the search engine 
 
 ## What the headline number does not say
 
-Every retrieval figure above comes from a fixture whose queries were derived from its own documents. That is a fair test of isolation and a flattering one for retrieval: the words in the query are largely the words in the answer. A second fixture asks the same corpus the way a person actually arrives, and the difference is the most useful thing measured here.
-
-Three query shapes, same corpus, same views, same engine, scored separately because averaging them would report none of them:
+Every retrieval figure above comes from a fixture whose queries were derived from its own documents. That is a fair test of isolation and a flattering one for retrieval: the words in the query are largely the words in the answer. A second fixture asks the same corpus the way a person arrives — the symptom, not the lesson's vocabulary.
 
 | query shape | example | rank-1 | found@5 |
 |---|---|---|---|
-| identifier | `ERR_DUPLICATE_CHARGE idempotency_key` | **0.962** | 1.000 |
-| short, ambiguous | *"duplicate writes"* | **0.836** | 0.918 |
-| paraphrase | *"two charges appeared for one checkout when the network blipped"* | **0.541** | 0.891 |
+| identifier | `ERR_DUPLICATE_CHARGE idempotency_key` | 0.962 | 1.000 |
+| short, ambiguous | *"duplicate writes"* | 0.836 | 0.918 |
+| symptom | *"two charges appeared for one checkout when the network blipped"* | 0.541 | **0.891** |
 | *the original fixture* | *the document's own vocabulary* | *1.000* | *1.000* |
 
-**Paste the error and it is excellent. Describe the symptom and it is a coin-flip for the top slot** — though the right answer is still in the top five 89% of the time. Mean token overlap between query and target is 0.061 in the original fixture and 0.004 in the paraphrase set, so this is a property of wording rather than of difficulty in any deeper sense.
+**The 0.541 is not a ceiling, and publishing it as one would repeat the 1.000 mistake with the sign flipped.** The first number was fixture-easy because the queries were born from the documents; the second is fixture-hard because they were born from the documents and then stripped of every shared word. Same methodology, inverted bias. Three rows decide which sentence is true, and they were not in the first write-up:
 
-That is the honest ceiling of the current design, and it is worth more than the 1.000: it says where the system is weak, and it predicts what a real session feels like when the user does not already know the vocabulary of the answer.
+**The right memory is retrieved 89% of the time**, and when it is retrieved its median rank is 1. This is a first-slot question, not a retrieval failure.
+
+**Every miss is a sibling.** Of 84 cases where the gold was not first: 84 were another lesson *from the same project*, 0 from another project, 0 junk. Reach isolation is perfect even here — the top slot is being taken by a memory about the same topic in the same repo, which a reader would plausibly also accept. Scoring one correct file punishes that, so part of the gap is the label rule rather than the engine.
+
+**It is a curve, not a point.** Rank-1 by how much vocabulary the query happens to share with its answer:
+
+| overlap | queries | rank-1 |
+|---|---|---|
+| 0–0.005 | 140 | 0.457 |
+| 0.005–0.02 | 40 | **0.800** |
+| 0.02–0.06 | 3 | 1.000 |
+
+Three quarters of this fixture sits in the most extreme bin — almost no shared content word — which is harder than production, where people still say *timeout*, *429*, *batch*. Production sits on the curve, not at its worst point.
+
+So the defensible claims are: **the right memory reaches the top five 89% of the time on symptom-worded queries; reach isolation holds perfectly even there; and top-slot accuracy runs 0.46 to 0.80 with how much vocabulary the user happens to share.** Not one number.
+
+## Neither ranker closes the first-slot gap
+
+Both interventions were then measured on that stratum — the case each is supposed to be for.
+
+| | rank-1 | found@5 | warm query |
+|---|---|---|---|
+| typed sub-queries | 0.541 | 0.891 | 20 ms |
+| + query expansion | 0.546 | 0.891 | 799 ms |
+| + cross-encoder rerank | 0.546 | 0.891 | 199 ms |
+
+**+0.005 each, at ten to forty times the cost.** The diagnostic above says why: what takes the top slot is a sibling lesson about the same topic in the same project. A reranker separates a right answer from wrong ones; it cannot separate a right answer from another right answer. Expansion invents a hypothetical document, which lands among the same siblings.
+
+The intervention this points at is not a better ranker. It is either fewer near-duplicates in the store — which is what consolidation is for — or a scoring rule that stops calling a sibling a miss.
 
 ## Query expansion, tested where it should have won
 
@@ -166,7 +192,7 @@ qmd can expand a plain query into lex/vec/**hyde** variants with a 1.7B model. H
 
 This also settles a design question before it was built. A router — expand on low-overlap queries, typed on identifiers — is the obvious response to "helps sometimes, hurts others". There is no stratum here where it helps enough to route to. `VESTIGE_QUERY_SHAPE=expand` remains for a corpus unlike this one.
 
-> **Scope of the reranking result.** The reranker returns byte-identical lists *on a filtered view of about eleven documents*. That is a set already close to the answer set, so a cross-encoder has little to separate. It does not license dropping reranking on a large unfiltered pool — this design does not have one, which is the point, but the claim should not be carried outside the configuration it was measured in.
+> **Scope of the reranking result.** The byte-identical lists were measured on the easy fixture, where a cross-encoder has nothing to separate because the first stage is already right. That result alone proved little. It was then run on the symptom stratum, where the gold is in the shortlist but not first — the case a cross-encoder exists for — and gained **+0.005**. Both results are on a filtered view of about eleven documents; neither licenses dropping reranking on a large unfiltered pool. This design does not have one, which is the point, but the claim should not travel outside the configuration it was measured in.
 
 ## A negative result, kept
 
