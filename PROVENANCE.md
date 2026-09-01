@@ -93,6 +93,14 @@ Retrieval that reports why each memory was shown or withheld, with what was **cl
 
 Sync runs from the MCP server rather than a hook, so correctness never depends on a host feature — which is what lets Codex work at all, having no hooks. The Claude hooks became an optimisation instead of the mechanism.
 
+### Usefulness split by who it belongs to
+
+Retrieval is per-reader and stays in a local log that is never synced; confirmation is evidence about the claim and goes in the memory. Neither parent separates these, and MCS has no usefulness signal at all. The split is the point: put retrieval in the memory and a shared store becomes a telemetry stream that also publishes who reads what.
+
+### Consolidation that proposes and never writes
+
+Clusters of memories stating one claim are found lexically and handed to a reader. The threshold is set from measurement rather than taste. Neither parent has this; the reason it stops short of writing is that lexical similarity is wrong in both directions — two memories can share vocabulary and mean opposite things.
+
 ### Smaller ones
 
 - **An anonymous writer cannot claim org-wide reach.** The read side already treated "I don't know who you are" as a reason to show almost nothing; the write side treated it as a reason to allow the widest possible claim.

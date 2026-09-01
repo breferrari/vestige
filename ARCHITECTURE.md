@@ -15,6 +15,8 @@ core/lib/memory.ts       the write contract, reach filter and pool naming
 core/lib/stores.ts       store kinds, routing, and materialising an external store
 core/lib/index-view.ts   per-caller search index over exactly what a caller may see
 core/lib/qmd-session.ts  the search engine, kept resident for the session
+core/lib/usage.ts        retrieval kept local, confirmation kept in the memory
+core/lib/consolidate.ts  finds memories stating one claim; proposes, never writes
 core/lib/vestige.ts      the public API: remember, recall, search, explain
 core/lib/sanitize.ts     the content gate
 core/lib/sync.ts         git pull/push, deletion review, bounded retry
@@ -22,6 +24,8 @@ core/lib/protocol.ts     the text that makes an agent use the store
 core/setup/qmd.ts        provisioning: install, update, heal
 core/setup/doctor.mjs    diagnosis
 core/setup/migrate.mjs   re-route memories when the configuration changes
+core/setup/import.mjs    take in an existing pile without resurrecting deletions
+core/setup/consolidate.mjs  print consolidation candidates
 host/                    the Claude Code surface: hooks, skills, commands, MCP
 codex/                   the Codex surface: AGENTS.md and registration
 ```
@@ -184,6 +188,8 @@ flowchart TD
 
 **Both layers matter.** The filter decides what may be seen; the ranker decides which of it answers the question. With the filter and no semantic ranking, rank-1 accuracy is 0.09 against 0.98. Neither substitutes for the other.
 
+**The query is stated, not expanded.** qmd's plain-text `query` is auto-expanded by the SDK into lex/vec/**hyde** variants, and HyDE writes a hypothetical answer with a model — an LLM call on every search, whose output then feeds the ranking. Vestige passes typed sub-queries instead: lexical first (it carries 2× weight, and a memory is found by the words of the problem more often than by a paraphrase), then vector. Measured over three runs each: rank-1 1.000 with zero variance at 14 ms a query, against 0.979 with sd 0.018 at 543 ms. `VESTIGE_QUERY_SHAPE=expand` restores expansion for a workload whose queries are worded unlike its documents — the case HyDE exists for, and the one this fixture does not stress.
+
 **The engine is resident, not re-launched per query.** Invoking the search CLI per call paid its model-loading cost every time — 2,748ms per search, almost none of it search. qmd speaks MCP over stdio, so one child is started per session and reused, keyed on the view's signature so a changed visible set re-resolves rather than answering from a stale collection. The child is unreferenced from the event loop and torn down on exit, because a resident child otherwise keeps a CLI or a test runner from ever exiting.
 
 **Reranking is off, and that is a measurement rather than a default.** On this corpus it returns **byte-identical hit lists on all 64 queries** — the same documents in the same order — for **2.7× the latency** (≈4,165 ms per query against ≈1,574 ms). Scores follow from that: found@5 1.000, rank-1 0.969, MRR 0.984 on both arms over three runs. Nothing to gain, most of the query budget to lose.
@@ -242,6 +248,16 @@ Foreignness is **derived, not stamped**. A stamped marker was tried first and sh
 The `explain` tool renders this per memory with the reason each was shown or withheld — every failure in this layer otherwise presents identically as *no results*.
 
 ---
+
+## What usefulness is allowed to change
+
+Two signals, kept in different places on purpose.
+
+**Retrieval is per-reader and frequent**, so it lives in a local log that is never synced and never committed. Writing it into the memory would rewrite shared files on every search — turning a store people review in pull requests into a stream of telemetry commits — and would publish who reads what.
+
+**Confirmation is evidence about the claim**, so it is written into the memory itself, where the next reader sees it. It is idempotent per day per project: a number that inflates on repetition stops meaning anything.
+
+Neither hides a memory. Never-retrieved is not useless — a memory nobody has needed yet is exactly what a store is for — so both only break ties that specificity and recency already left level, and the bonus is capped so popularity cannot displace relevance.
 
 ## What is deliberately absent
 

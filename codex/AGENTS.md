@@ -26,4 +26,8 @@ You have a durable memory store, reachable through the `vestige` MCP server.
 
 Scope is reach. `project` is the default and stays in this repo; `platform` reaches anything sharing a platform; `general` reaches everything and has to be justified. Claiming `general` while naming projects is narrowed automatically, and the original claim is kept so the narrowing can be audited.
 
+When a memory you retrieved is acted on and turns out to be RIGHT, call `confirm` with its filename. That is the strongest thing anyone can say about a claim, and it is written into the memory where the next reader sees it — not into a private log. Confirm because it resolved the thing you were doing, never merely because you read it.
+
+Before delegating discovery to a sub-agent, search and then BRIEF IT: open the spawn prompt with a `KB context:` block of what the store said, or the line `KB context: none relevant.` A sub-agent starts empty, so searching and spawning in the same message hands it nothing.
+
 If `recall` comes back empty, call `explain` — it says why each memory was shown or withheld, which is what tells an empty store apart from a reach mismatch.

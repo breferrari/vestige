@@ -83,8 +83,9 @@ Vestige is not a from-scratch design and does not pretend to be. It takes a **di
 
 Honest about what is and is not established:
 
-- **Measured**: rank-1 1.000 end to end on a 183-memory, 16-project corpus, unchanged under a 24% scope over-claim; 80 of 80 planted secrets quarantined with zero contaminated blobs reaching git history and zero clean memories held back; the behavioural layer verified inside live sessions rather than only in tests. The full evidence, method and reasoning is in **[RECORD.md](./RECORD.md)**; the harness is public at [memory-stack-lab](https://github.com/breferrari/memory-stack-lab) and every number regenerates from `./reproduce.sh`.
-- **Not established**: it has not been used in anger on real work over time. Scale is measured to 40 projects and untested beyond it. There is no consolidation, no decay signal, and no episodic tier — the last of those tested and deliberately not built. Defects in this codebase have been found by benchmarking rather than by anything failing; assume there are more.
+- **Measured**: rank-1 1.000 with zero variance across runs, at 14 ms per warm query, end to end on a 183-memory, 16-project corpus, unchanged under a 24% scope over-claim; 80 of 80 planted secrets quarantined with zero contaminated blobs reaching git history and zero clean memories held back; the behavioural layer verified inside live sessions rather than only in tests. The full evidence, method and reasoning is in **[RECORD.md](./RECORD.md)**; the harness is public at [memory-stack-lab](https://github.com/breferrari/memory-stack-lab) and every number regenerates from `./reproduce.sh`.
+- **Not established**: it has not been used in anger on real work over time. There is no episodic tier — tested, and deliberately not built. Consolidation proposes but never writes, by design. Defects in this codebase have been found by benchmarking and by cross-platform CI rather than by anything failing in use; assume there are more.
+- **Measured at scale**: 180 projects and 3,600 memories, with **20 visible to one caller** — unchanged from 40 projects — and write cost flat at 3.9 ms per memory.
 
 ## Documentation
 
