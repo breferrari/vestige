@@ -135,6 +135,39 @@ The first number is an index build and happens once per caller. The second is wh
 
 It was **2,748 ms** when first measured, and **543 ms** after the search engine was made resident. The last factor of thirty-eight came from removing the LLM expansion described above — most of what remained was never search at all.
 
+## What the headline number does not say
+
+Every retrieval figure above comes from a fixture whose queries were derived from its own documents. That is a fair test of isolation and a flattering one for retrieval: the words in the query are largely the words in the answer. A second fixture asks the same corpus the way a person actually arrives, and the difference is the most useful thing measured here.
+
+Three query shapes, same corpus, same views, same engine, scored separately because averaging them would report none of them:
+
+| query shape | example | rank-1 | found@5 |
+|---|---|---|---|
+| identifier | `ERR_DUPLICATE_CHARGE idempotency_key` | **0.962** | 1.000 |
+| short, ambiguous | *"duplicate writes"* | **0.836** | 0.918 |
+| paraphrase | *"two charges appeared for one checkout when the network blipped"* | **0.541** | 0.891 |
+| *the original fixture* | *the document's own vocabulary* | *1.000* | *1.000* |
+
+**Paste the error and it is excellent. Describe the symptom and it is a coin-flip for the top slot** — though the right answer is still in the top five 89% of the time. Mean token overlap between query and target is 0.061 in the original fixture and 0.004 in the paraphrase set, so this is a property of wording rather than of difficulty in any deeper sense.
+
+That is the honest ceiling of the current design, and it is worth more than the 1.000: it says where the system is weak, and it predicts what a real session feels like when the user does not already know the vocabulary of the answer.
+
+## Query expansion, tested where it should have won
+
+qmd can expand a plain query into lex/vec/**hyde** variants with a 1.7B model. HyDE exists to close exactly the register gap above — the query is a question, the corpus is prose — so the paraphrase stratum is the case it is for. Measured on all three shapes:
+
+| query shape | typed sub-queries | with expansion | delta |
+|---|---|---|---|
+| paraphrase | 0.541 @ 20 ms | 0.546 @ 799 ms | **+0.005** |
+| identifier | 0.962 @ 20 ms | 0.923 @ 640 ms | **−0.039** |
+| short, ambiguous | 0.836 @ 19 ms | 0.787 @ 478 ms | **−0.049** |
+
+**It gains nothing where it was supposed to help and costs accuracy where the query already carries strong lexical signal**, at twenty-five to forty times the latency. The mechanism is not mysterious: a hypothetical document invents plausible neighbours, and when the query contains the exact token the answer contains, inventing neighbours can only move away from it.
+
+This also settles a design question before it was built. A router — expand on low-overlap queries, typed on identifiers — is the obvious response to "helps sometimes, hurts others". There is no stratum here where it helps enough to route to. `VESTIGE_QUERY_SHAPE=expand` remains for a corpus unlike this one.
+
+> **Scope of the reranking result.** The reranker returns byte-identical lists *on a filtered view of about eleven documents*. That is a set already close to the answer set, so a cross-encoder has little to separate. It does not license dropping reranking on a large unfiltered pool — this design does not have one, which is the point, but the claim should not be carried outside the configuration it was measured in.
+
 ## A negative result, kept
 
 An early design intended to separate episodic session logs from durable lessons, on the widely-repeated argument that mixing them degrades retrieval of both. Tested directly, at ratios up to 5.6 logs per lesson, **it did not reproduce** — found@5 and rank-1 were unchanged.
