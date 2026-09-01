@@ -87,7 +87,15 @@ async function start(index: string, signature: string, cwd: string): Promise<Ses
 			else waiter.resolve(msg.result);
 		}
 	});
-	proc.on("exit", () => { if (session === s) session = null; });
+	proc.on("exit", () => {
+		if (session === s) session = null;
+		// Fail the in-flight requests immediately. Without this they sit until
+		// their own timeout, so a child that died instantly still costs every
+		// caller the full wait — and the CLI fallback that would have answered
+		// them does not start until they give up.
+		for (const [, waiter] of s.pending) { clearTimeout(waiter.timer); waiter.reject(new Error("qmd session exited")); }
+		s.pending.clear();
+	});
 	proc.stderr.resume();
 
 	// A resident child holds the event loop open, so a CLI or a test runner that

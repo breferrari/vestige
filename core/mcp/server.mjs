@@ -87,6 +87,10 @@ const TOOLS = [
   },
 ];
 
+const clampLimit = (v, dflt) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), 100) : dflt;
+};
 const text = (s) => ({ content: [{ type: "text", text: s }] });
 
 async function callTool(name, args) {
@@ -103,13 +107,17 @@ async function callTool(name, args) {
     const warn = r.warnings.length ? `\n\nWarnings:\n- ${r.warnings.join("\n- ")}` : "";
     return text(`Recorded to the ${r.tier} store as ${r.rel}\nscope: ${r.value.scope}  projects: [${r.value.projects.join(", ")}]${r.value.downgraded_from ? `  (downgraded from ${r.value.downgraded_from})` : ""}${warn}`);
   }
+  // A caller supplies `limit` and nothing checked it. A string reaches
+  // Array.slice and produces an empty result that reads as "nothing is
+  // visible"; a negative one slices from the end and returns the LEAST
+  // relevant hits; a huge one asks the ranker for work nobody wanted.
   if (name === "recall") {
-    const hits = recall({ cwd, limit: args?.limit ?? 20 });
+    const hits = recall({ cwd, limit: clampLimit(args?.limit, 20) });
     if (!hits.length) return text("No memories are visible to this project yet.");
     return text(hits.map((h) => `- [${h.tier}/${h.scope}${h.foreign ? "/foreign" : ""}] ${h.name}`).join("\n"));
   }
   if (name === "search") {
-    const { hits, engine } = await search(args?.query ?? "", { cwd, limit: args?.limit ?? 10 });
+    const { hits, engine } = await search(String(args?.query ?? ""), { cwd, limit: clampLimit(args?.limit, 10) });
     if (!hits.length) return text("No visible memory matched.");
     return text(`engine: ${engine}\n` + hits.map((h) => `- [${h.tier}/${h.scope}] ${h.name}`).join("\n"));
   }

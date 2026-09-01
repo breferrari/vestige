@@ -27,7 +27,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 
 export type StoreKind = "repo" | "external" | "local";
 export type ScopeName = "project" | "platform" | "general";
@@ -104,13 +104,38 @@ export function storePath(s: StoreConfig, cwd: string = process.cwd()): string |
 		// the state but silently left the personal STORE where it was — which
 		// also meant no test could isolate itself from the developer's real
 		// memories, and one leaked into a benchmark.
-		const base = isAbsolute(s.path) ? s.path : join(vestigeHome(), s.path);
-		return join(base, sub);
+		// An absolute path is a deliberate choice a person makes for their own
+		// store, so it stands. A RELATIVE one must stay under VESTIGE_HOME: it
+		// came from a file that may be shared, and "../.." is not a location
+		// anyone typed on purpose.
+		if (isAbsolute(s.path)) return join(s.path, sub);
+		return contained(join(vestigeHome(), s.path, sub), vestigeHome(), s.name);
 	}
 	const root = repoRoot(cwd);
 	if (!root) return null;
 	const base = isAbsolute(s.path) ? s.path : join(root, s.path);
-	return join(base, sub);
+	return contained(join(base, sub), root, s.name);
+}
+
+/**
+ * Refuse a store path that escapes the tree it belongs to.
+ *
+ * `.vestige/config.json` is CHECKED INTO THE SHARED REPOSITORY, which means in a
+ * team it is written by whoever committed it — and it decides where this tool
+ * writes files and runs git. A `path` of "../../.." resolved happily, so a
+ * config could place a store anywhere the user can write, with no sign in any
+ * output that it had left the repo.
+ *
+ * A store is data belonging to a tree; if it resolves outside that tree the
+ * configuration is wrong or hostile, and either way the answer is the same.
+ */
+function contained(candidate: string, root: string, name: string): string | null {
+	const rel = relative(root, candidate);
+	if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) {
+		process.emitWarning(`vestige: store ${JSON.stringify(name)} resolves outside the repository and was ignored — ${candidate}`);
+		return null;
+	}
+	return candidate;
 }
 
 /** Which store takes a memory of this scope. First match wins. */

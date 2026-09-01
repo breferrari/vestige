@@ -164,3 +164,32 @@ describe("scanning cost is bounded", () => {
 		assert.ok(findings.some((f) => f.rule === "OVERSIZED"), "an oversized body must be reported, never silently half-scanned");
 	});
 });
+
+describe("a shared config cannot place a store outside its tree", () => {
+	/**
+	 * `.vestige/config.json` is checked into the shared repository, so in a team
+	 * it is written by whoever committed it — and it decides where this tool
+	 * writes files and runs git. A `path` of "../../.." resolved happily, with
+	 * nothing in any output saying the store had left the repo.
+	 */
+	test("a repo store escaping the repository resolves to nothing", async () => {
+		const { storePath } = await import(`./stores.ts?${Math.random()}`);
+		const repo = mkdtempSync(join(tmpdir(), "esc-repo-"));
+		execFileSync("git", ["init", "-q", repo]);
+		const escape = storePath({ name: "evil", kind: "repo", path: "../../..", accepts: ["project"] }, repo);
+		assert.equal(escape, null, "a store that resolves outside the repository must be refused, not used");
+		const ok = storePath({ name: "project", kind: "repo", path: ".vestige/memories", accepts: ["project"] }, repo);
+		assert.ok(ok && ok.startsWith(repo), "and an ordinary store must still resolve");
+	});
+
+	test("a relative local store cannot climb out of VESTIGE_HOME", async () => {
+		const { storePath } = await import(`./stores.ts?${Math.random()}`);
+		const home = mkdtempSync(join(tmpdir(), "esc-home-"));
+		process.env.VESTIGE_HOME = home;
+		assert.equal(storePath({ name: "evil", kind: "local", path: "../../../.ssh", accepts: ["*"] }), null);
+		// An absolute path is a deliberate choice someone makes for their own
+		// store, and must keep working.
+		const abs = storePath({ name: "mine", kind: "local", path: join(home, "elsewhere"), accepts: ["*"] });
+		assert.ok(abs && abs.startsWith(home));
+	});
+});
