@@ -79,7 +79,7 @@ Neither parent inspects what a memory *contains*. MCS guards the filename; OM ha
 
 ### Bounded retry with jitter on push
 
-MCS pushes once and says "will retry on next Stop" — but the next Stop lands in the next simultaneous burst. Measured deterministically: a single attempt lands exactly **1 of N** writers regardless of N; bounded retry recovers essentially all.
+MCS pushes once and says "will retry on next Stop" — but the next Stop lands in the next simultaneous burst. Measured with a barrier-synchronised race, three runs at each width: a single attempt lands **exactly one writer regardless of N** — 1 of 5, 1 of 10, 1 of 20, with zero variance — while bounded retry lands **all of them**, also with zero variance.
 
 ### Foreignness derived at read time
 

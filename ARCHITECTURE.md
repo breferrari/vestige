@@ -186,7 +186,9 @@ flowchart TD
 
 **The engine is resident, not re-launched per query.** Invoking the search CLI per call paid its model-loading cost every time — 2,748ms per search, almost none of it search. qmd speaks MCP over stdio, so one child is started per session and reused, keyed on the view's signature so a changed visible set re-resolves rather than answering from a stale collection. The child is unreferenced from the event loop and torn down on exit, because a resident child otherwise keeps a CLI or a test runner from ever exiting.
 
-**Reranking is off, and that is a measurement rather than a default.** With the reranker enabled, rank-1 was 0.906 and four of sixty-four queries fell back to unranked results; with it disabled, 1.000 and none — and faster. It was re-sorting an already-correct list and demoting the right answer.
+**Reranking is off, and that is a measurement rather than a default.** Scored over repeated runs on the same fixture, the reranker changes **nothing** — found@5 1.000, rank-1 0.968 and MRR 0.984 with it on and with it off, identical to three decimal places — while costing **2.7× the latency** (≈4,165 ms per query against ≈1,574 ms). Nothing to gain, most of the query budget to lose.
+
+> An earlier version of this paragraph claimed the reranker actively *hurt* accuracy: 0.906 against 1.000, with four of sixty-four queries falling back to unranked results. **That does not reproduce.** It came from a harness that timed the two arms without scoring them, where those four fallbacks were a defect in the run rather than an effect of reranking. The narrower claim is the one the evidence supports, and it is still enough to justify the default.
 
 **The first query for a caller builds that caller's view index**, which costs seconds; every subsequent query in the session does not. Both are reported separately in the benchmarks, since one mean over the two describes neither.
 
