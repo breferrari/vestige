@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const lib = (f) => pathToFileURL(join(HERE, "..", "lib", f)).href;
 
-const { remember, recall, search, explain, hasQmd } = await import(lib("vestige.ts"));
+const { remember, recall, search, confirm, explain, hasQmd } = await import(lib("vestige.ts"));
 const { activeStores, loadConfig } = await import(lib("stores.ts"));
 const { ensureQmd } = await import(pathToFileURL(join(HERE, "..", "setup", "qmd.ts")).href);
 
@@ -76,6 +76,18 @@ const TOOLS = [
     inputSchema: { type: "object", required: ["query"], properties: { query: { type: "string" }, limit: { type: "number" } } },
   },
   {
+    name: "confirm",
+    description:
+      "Record that a memory was acted on and turned out to be RIGHT. The strongest thing anyone can say about a claim, and the next reader sees it. Call it when a memory you retrieved actually resolved the thing you were doing — not merely because you read it. Confirming twice in one day from the same project counts once.",
+    inputSchema: {
+      type: "object",
+      required: ["memory"],
+      properties: {
+        memory: { type: "string", description: "The memory's filename, as `recall` or `search` reported it." },
+      },
+    },
+  },
+  {
     name: "explain",
     description: "Why every memory was or was not shown to this project. Shows reach, origin, what the writer CLAIMED versus what was recorded (a narrowed scope, a capped confidence), and the exact reason each memory is visible or withheld. Use when recall returns nothing and you need to tell an empty store apart from a reach mismatch.",
     inputSchema: { type: "object", properties: { visible_only: { type: "boolean", description: "Show only what this project can see (default false — the withheld ones are usually the question)." } } },
@@ -120,6 +132,12 @@ async function callTool(name, args) {
     const { hits, engine } = await search(String(args?.query ?? ""), { cwd, limit: clampLimit(args?.limit, 10) });
     if (!hits.length) return text("No visible memory matched.");
     return text(`engine: ${engine}\n` + hits.map((h) => `- [${h.tier}/${h.scope}] ${h.name}`).join("\n"));
+  }
+  if (name === "confirm") {
+    const r = confirm(String(args?.memory ?? ""), { cwd });
+    if (!r.ok) return text(r.detail);
+    scheduleSync();
+    return text(`Confirmed: ${args.memory} (${r.count}x). Recorded in the memory itself, so the next reader sees it.`);
   }
   if (name === "explain") {
     let rows = explain({ cwd });

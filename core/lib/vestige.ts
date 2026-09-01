@@ -28,6 +28,7 @@ import { execFileSync } from "node:child_process";
 import { runQmd, resolveQmdEntry } from "../setup/qmd.ts";
 import { ensureIndex } from "./index-view.ts";
 import { markSuperseded, addToFrontmatterList } from "./om/memory-supersede.ts";
+import { noteRetrieved, confirmMemory } from "./usage.ts";
 import { sessionQuery } from "./qmd-session.ts";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -141,6 +142,21 @@ export function remember(input: MemoryInput, opts: { cwd?: string; now?: Date } 
 	return { ...r, warnings: [...(r.warnings ?? []), ...refWarnings], tier: target.name, store: ready.path, superseded, linked };
 }
 
+/**
+ * Record that a memory was acted on and proved right.
+ *
+ * The strongest thing anyone can say about a claim, so it is written into the
+ * memory rather than into a private log — the next reader deserves to see it.
+ */
+export function confirm(rel: string, opts: { cwd?: string } = {}): { ok: boolean; count: number; detail: string; store: string | null } {
+	const cwd = opts.cwd ?? process.cwd();
+	for (const { path } of activeStores(cwd)) {
+		if (!existsSync(join(path, rel))) continue;
+		return { ...confirmMemory(path, rel, currentProject(cwd)), store: path };
+	}
+	return { ok: false, count: 0, detail: `no visible memory named ${rel}`, store: null };
+}
+
 export interface RecallHit {
 	readonly name: string;
 	readonly full: string;
@@ -164,7 +180,12 @@ export function recall(opts: { cwd?: string; limit?: number; caller?: Caller } =
 	const visibleEntries = visibleTo(all.map((x) => x.e), caller);
 	const tierOf = new Map(all.map((x) => [x.e.full, x.tier]));
 	const ranked = rankBySpecificity(visibleEntries, caller);
-	return ranked.slice(0, opts.limit ?? 20).map((e) => ({
+	const out = ranked.slice(0, opts.limit ?? 20);
+	// Note what was actually shown, locally. Never in the memory: a shared store
+	// is reviewed in pull requests, and per-reader telemetry does not belong in
+	// a file other people read.
+	noteRetrieved(out.map((e) => e.name));
+	return out.map((e) => ({
 		name: e.name,
 		full: e.full,
 		tier: tierOf.get(e.full) ?? "unknown",

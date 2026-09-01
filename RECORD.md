@@ -12,6 +12,8 @@ Three companion documents, kept separate on purpose: [ARCHITECTURE.md](./ARCHITE
 
 The fixture is the same throughout: **183 memories across 16 projects, seeded and deterministic**, and **64 queries** with exactly one correct document each. Because there is one right answer per query, `found@5` is recall of the target and `rank-1` is how often the right memory is the first thing the agent sees. `prec@5` is capped at 0.200 by construction and reaches 1.0 trivially under any per-caller view, so it is reported and not read.
 
+**Every figure below is a mean over three runs, with the standard deviation where it matters.** One run is an anecdote: this fixture varied by a whole query between consecutive runs until the cause was found and removed. A min–max range is no better — it headlines whichever run was worst — so the numbers are averages, computed by a committed script rather than by hand, from artifacts committed beside it.
+
 Every number here comes from `./reproduce.sh` in the [memory-stack-lab](https://github.com/breferrari/memory-stack-lab) repository, which regenerates the corpus from seed, writes it through this plugin's real write path, queries through this plugin's real public API, and scores the output. The raw run artifacts are committed under `runs/<date>/`.
 
 ---
@@ -29,7 +31,7 @@ Each rung adds one thing to the rung above it.
 | V4a · one index per project | 1.000 | 0.969 | 0.984 | 0.00 |
 | V4b · rank globally, filter afterwards (depth 5) | 0.375 | 0.375 | 0.375 | 0.00 |
 | V4b · the same, at the engine's maximum depth of 20 | 0.953 | 0.938 | 0.945 | 0.00 |
-| **Vestige** | **1.000** | **0.984–1.000** | **0.992–1.000** | **0.00** |
+| **Vestige** | **1.000** | **1.000** | **1.000** | **0.00** |
 
 Four conclusions, and the last two are the architecture.
 
@@ -47,16 +49,18 @@ Four conclusions, and the last two are the architecture.
 
 The prior art is [`mcs-cli/memory`](https://github.com/mcs-cli/memory), and it recently gained a qmd retrieval backend on the `bruno/qmd-retrieval-backend` branch. Both were measured on the same corpus and the same queries. The branch was replicated from its own `sync-memories.sh` rather than approximated — a named index under the project via `QMD_CONFIG_DIR`/`INDEX_PATH`, one embedding model in all three of qmd's model slots, and the structured lex/vec query shape with reranking off that its own instructions tell the agent to use.
 
-| | found@5 | rank-1 | MRR | foreign in top-5 |
-|---|---|---|---|---|
-| MCS before qmd, shared pool | 0.297 | 0.078 | 0.157 | 4.63 |
-| MCS with qmd, **one index per project** | 1.000 | **0.984** | 0.992 | 0.00 |
-| MCS with qmd, **one shared pool** | 0.359 | **0.078** | 0.167 | 4.63 |
-| **Vestige** | 1.000 | **0.984–1.000** | 0.992–1.000 | 0.00 |
+| | found@5 | rank-1 | sd | MRR | foreign | per query |
+|---|---|---|---|---|---|---|
+| MCS before qmd, shared pool | 0.297 | 0.078 | — | 0.157 | 4.63 | — |
+| MCS with qmd, **one index per project** | 1.000 | **0.984** | 0.000 | 0.992 | 0.00 | 1,529 ms |
+| MCS with qmd, **one shared pool** | 0.375 | **0.078** | 0.000 | 0.168 | 4.61 | 1,528 ms |
+| **Vestige** | 1.000 | **1.000** | **0.000** | 1.000 | 0.00 | **14 ms** |
 
-**The honest reading is not "ours wins."**
+**The honest reading, in the order the evidence arrived.**
 
-**Configured one index per project, that design equals this one.** When memories live in a directory per project, isolation is a property of the layout, and a reach model buys nothing on top of it. Vestige's filter is not better in that configuration — it is the same answer reached a more complicated way.
+**Configured one index per project, that design equalled this one for most of this project's life** — 0.984 against 0.979, inside the noise, with theirs the more repeatable of the two. When memories live in a directory per project, isolation is a property of the layout and a reach model buys nothing on top of it. That was the fair statement, and it was published here for as long as it was true.
+
+**It changed for a reason worth stating plainly, because it was our defect and not their weakness.** Vestige was sending qmd a plain-text query, which the SDK auto-expands into lex/vec/**hyde** variants — and HyDE writes a hypothetical answer *with a model*. An LLM was running on every search: it cost about 500 ms, and its output feeding the ranking was the entire reason our results were not repeatable. Passing typed sub-queries states the retrieval strategy outright and skips expansion. The prior art was already doing this; reading it is how the problem was found.
 
 **The reach model earns its place only when memories are shared.** That is not a hypothetical case; it is what a shared team pool produces, and it is the configuration this whole class of tool exists for. There, rank-1 falls from 0.984 to **0.078**, with 4.6 documents from other people's projects in every five results. Adding qmd does not fix it, because retrieval quality was never the failure — the pool contains the wrong documents and ranks them correctly.
 
@@ -86,13 +90,13 @@ A reach model is only as good as the reach people declare, and people declare to
 | a bare reach filter | 0.391 | 0.628 | 3.53 | 52.7 |
 | with reach narrowed at write time | **0.984** | 0.992 | **0.00** | 11.4 |
 
-Over three repetitions of each arm, the end-to-end run at 24% over-claim scores rank-1 **0.938–0.984** against **0.984–1.000** correctly scoped, with found@5 at 1.000 and zero foreign documents in both. So over-claiming does cost something — roughly a twentieth of a rank — but the collapse to 0.391 does not happen, and the difference between those two outcomes is the whole point.
+Over three runs of each arm, the end-to-end run at 24% over-claim scores **exactly the same as the correctly-scoped one** — found@5 1.000, rank-1 1.000, MRR 1.000, zero foreign documents, sd 0.000 on both. One memory in four claiming to be relevant everywhere costs nothing at all.
 
 Every over-claim is narrowed at the point of writing, because a memory that claims `general` while naming specific projects has told you its real reach in the same breath. The pool ends up holding zero falsely-general memories, so there is nothing for the filter to be defeated by.
 
 This is the single most important robustness property in the system: **the filter is not asked to survive bad declarations, because bad declarations do not get written.**
 
-> A single run of each arm scored them identically, and that was published here before it was repeated. Three runs showed the fixture varies by one query, so every figure in this document is now a range over repetitions rather than whichever run happened to come first.
+> This claim has been wrong in both directions here. A single run once scored the arms identically and was published before it was repeated; three runs then showed a real gap of about a twentieth of a rank, and that was published too. The gap turned out to be measurement noise from the query shape, not the over-claim — with that removed, the arms are identical and both are exact. Every figure in this document is now a mean over three runs with its standard deviation, which is what makes a claim like this checkable rather than assertable.
 
 ---
 
@@ -120,17 +124,16 @@ Retrieval quality was benchmarked for a week before anyone timed a query. The fi
 
 That is not a polish issue. For a system whose entire protocol is *consult the store before answering*, a slow search is a search the agent learns to avoid, which silently undoes the behavioural layer that makes any of the rest happen. The fix was to stop paying the startup cost per query: the search engine speaks MCP over stdio, so it is spawned once and kept resident for the session.
 
-Latency is reported split, because one mean over both describes neither. Measured over three repetitions per arm on an idle machine — ambient load 0.54–0.65 before each run, sampled *before* the run starts, since a sample taken afterwards reports the benchmark's own footprint:
+Latency is reported split, because one mean over both describes neither. Three runs, idle machine, ambient load stamped into every result file:
 
 | | |
 |---|---|
-| first query for a project — builds that caller's view index | **5.0–5.3 s** |
-| every subsequent query in the session | **305–559 ms** |
-| median across all queries | **313–337 ms** |
+| first query for a project — builds that caller's view index | **3.6 s** |
+| every subsequent query in the session | **14 ms** |
 
-The median sits near the steady state because most queries are not the first for their project. Reporting the median alone — which an earlier draft of this document did — hides a five-second first hit entirely, and that first hit is the one a new caller actually experiences.
+The first number is an index build and happens once per caller. The second is what a session actually experiences, and it is the number that decides whether an agent keeps calling the store or quietly stops.
 
-Each run stamps its own load average into its results file, because a timing without its conditions is not interpretable later and "I will remember the machine was busy" has failed every time it was relied upon.
+It was **2,748 ms** when first measured, and **543 ms** after the search engine was made resident. The last factor of thirty-eight came from removing the LLM expansion described above — most of what remained was never search at all.
 
 ## A negative result, kept
 
@@ -164,7 +167,7 @@ Every decision the gate makes is appended to a bounded audit log, because the fa
 | A memory's reach and its location can disagree | Reach *computes* storage — the same declaration decides both |
 | Facet-only ranking scores 0.094 | The search engine is a hard dependency, provisioned and healed by the plugin |
 | A gate after staging leaves a dirty history | The content gate runs before the sync path touches the tree |
-| 2,748ms per search | The engine is kept resident for the session |
+| 2,748 ms per search, then 543 ms | The engine is kept resident, and the query is stated as typed sub-queries rather than auto-expanded — the expansion was an LLM call per search |
 | Every silent failure in this layer presents as "no results" | `explain`, and an audit log for the gate |
 
 ---
