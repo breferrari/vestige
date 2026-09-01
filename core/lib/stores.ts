@@ -66,7 +66,9 @@ export const DEFAULT_CONFIG: VestigeConfig = {
 export function repoRoot(cwd: string = process.cwd()): string | null {
 	try {
 		const out = execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-		return out || null;
+		// Normalise: git prints forward slashes on Windows, which do not compare
+		// equal to anything node produces on that platform.
+		return out ? resolve(out) : null;
 	} catch { return null; }
 }
 
@@ -130,7 +132,12 @@ export function storePath(s: StoreConfig, cwd: string = process.cwd()): string |
  * configuration is wrong or hostile, and either way the answer is the same.
  */
 function contained(candidate: string, root: string, name: string): string | null {
-	const rel = relative(root, candidate);
+	// Normalise BOTH sides before comparing. git reports the toplevel with
+	// forward slashes on Windows and with symlinks resolved on macOS
+	// (/private/var vs /var), while node's join produces neither — so a
+	// perfectly contained path compared as an escape on both platforms, and only
+	// Linux agreed with itself.
+	const rel = relative(resolve(root), resolve(candidate));
 	if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) {
 		process.emitWarning(`vestige: store ${JSON.stringify(name)} resolves outside the repository and was ignored — ${candidate}`);
 		return null;

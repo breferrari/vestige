@@ -20,10 +20,13 @@
  */
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { basename, dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const HERE = new URL(".", import.meta.url).pathname;
+// `new URL(".", import.meta.url).pathname` yields "/C:/..." on Windows, which
+// is not a path any fs call accepts — every import here failed on that leg and
+// nowhere else. fileURLToPath is the only correct conversion.
+const HERE = dirname(fileURLToPath(import.meta.url));
 const { activeStores } = await import(pathToFileURL(join(HERE, "..", "lib", "stores.ts")).href);
 const { scan } = await import(pathToFileURL(join(HERE, "..", "lib", "sanitize.ts")).href);
 

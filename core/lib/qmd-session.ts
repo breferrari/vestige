@@ -134,9 +134,29 @@ export async function sessionQuery(
 	if (!session?.ready) return null;
 
 	try {
+		// Two query shapes, and the difference is not cosmetic.
+		//
+		// `query` is auto-expanded by qmd into lex/vec/HYDE variants. HyDE writes
+		// a hypothetical answer with a model, so the expansion — and therefore
+		// the ranking — is model output: it varies run to run, and it costs an
+		// LLM round trip on every search. Measured over three runs, this shape
+		// gives rank-1 sd 0.024.
+		//
+		// `searches` states the sub-queries outright and skips expansion. The
+		// prior-art system passes this shape and scores sd 0.000 over three runs
+		// on the same fixture — which is the REASON to test it here, not evidence
+		// about this code. The first sub-query carries 2x weight, so lexical goes
+		// first: a memory is found by the words of the problem more often than by
+		// a paraphrase of it.
+		//
+		// The default stays on the measured shape until the A/B says otherwise.
+		const typed = (process.env.VESTIGE_QUERY_SHAPE ?? "expand") === "typed";
+		const args = typed
+			? { searches: [{ type: "lex", query: opts.query }, { type: "vec", query: opts.query }], intent: opts.query, limit: opts.limit, rerank: opts.rerank }
+			: { query: opts.query, limit: opts.limit, rerank: opts.rerank };
 		const result = (await send(session, "tools/call", {
 			name: "query",
-			arguments: { query: opts.query, limit: opts.limit, rerank: opts.rerank },
+			arguments: args,
 		}, 30_000)) as {
 			content?: { type?: string; text?: string }[];
 			structuredContent?: { results?: { file?: string }[] };
