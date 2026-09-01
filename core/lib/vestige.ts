@@ -164,6 +164,8 @@ export interface RecallHit {
 	readonly foreign: boolean;
 	readonly scope: string;
 	readonly projects: string[];
+	/** A better version of this lesson exists. Kept, and ranked below it. */
+	readonly superseded: boolean;
 }
 
 /** Everything this caller may see, from BOTH stores, ranked. */
@@ -180,7 +182,19 @@ export function recall(opts: { cwd?: string; limit?: number; caller?: Caller; no
 	const visibleEntries = visibleTo(all.map((x) => x.e), caller);
 	const tierOf = new Map(all.map((x) => [x.e.full, x.tier]));
 	const ranked = rankBySpecificity(visibleEntries, caller);
-	const out = ranked.slice(0, opts.limit ?? 20);
+
+	/**
+	 * Sink what has been superseded; never hide it.
+	 *
+	 * `supersedes` marked the old memory and the read path then ignored the
+	 * marker, so both versions came back side by side — the twins problem the
+	 * feature exists to remove. Dropping them instead would lose the record that
+	 * a belief changed, which is the reason superseding keeps the file at all.
+	 * So they stay visible and rank last.
+	 */
+	const isSuperseded = (e: PoolEntry) => Boolean((e.fm as Record<string, unknown>)?.superseded_by);
+	const ordered = [...ranked.filter((e) => !isSuperseded(e)), ...ranked.filter(isSuperseded)];
+	const out = ordered.slice(0, opts.limit ?? 20);
 	// Note what was actually shown, locally. Never in the memory: a shared store
 	// is reviewed in pull requests, and per-reader telemetry does not belong in
 	// a file other people read.
@@ -196,6 +210,7 @@ export function recall(opts: { cwd?: string; limit?: number; caller?: Caller; no
 		foreign: isForeign(e),
 		scope: String(e.facets.scope ?? "project"),
 		projects: e.facets.projects ?? [],
+		superseded: isSuperseded(e),
 	}));
 }
 
