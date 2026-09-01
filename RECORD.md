@@ -205,6 +205,25 @@ Every decision the gate makes is appended to a bounded audit log, because the fa
 
 ---
 
+## Does the protocol change anything?
+
+The behavioural layer is the part that makes any of the rest happen, and it had never been measured — only verified present. Those are different claims: text can sit in context and be ignored. The maintainer of the prior-art pack said as much about this project's protocol, that it is too long and gets filtered.
+
+A 2×2 tests it: the protocol injected or suppressed, on prompts that should trigger a lookup and prompts that should not. Tools, hooks and server are identical in both cells — only the text differs — because comparing "installed" against "not installed" would confound the instruction with the availability of what it names. The gate is off throughout, since it is a separate and probably stronger treatment. Six prompts per cell, one sample, four models.
+
+| model | consults the store, protocol on / off | searches before acting, on / off |
+|---|---|---|
+| Haiku | 4/6 · 5/6 | 4/6 · 5/6 |
+| Sonnet | **5/6 · 3/6** | **4/6 · 2/6** |
+| Opus | **5/6 · 3/6** | **5/6 · 3/6** |
+| Fable | 3/6 · 3/6 | 3/6 · 3/6 |
+
+**It helps on two models, does nothing on one, and is marginally negative on the fourth.** Across 48 control episodes there was not a single search on an editing prompt, so nothing is over-triggering — the specificity the design wanted is real.
+
+The claim this supports is narrow: *the protocol raises store consultation on the mid and large models, by about two episodes in six, at n=6 per cell.* It does not support "the protocol works" as a general statement, and the disagreement with the prior-art maintainer is probably a disagreement about which model is running rather than about the text.
+
+> The experiment produced four instrument faults before it produced a result, and each one returned a clean number rather than an error: a second memory server the endpoint did not count (every cell zero); the host's own schema-loading call scored as a discovery action (0/24, unreachable by construction); the cheapest model standing in for the population, which flipped the sign; and a fix for the second fault that never landed, so every arm ran on the broken endpoint anyway. Three of those were believed and reported before being caught. **A broken instrument does not fail — it agrees with you.**
+
 ## What is deliberately absent
 
 Stated so nobody assumes otherwise: there is no episodic tier (tested, did not reproduce), no consolidation of repeated observations into rules, and no decay or confirmation signal — nothing tracks whether a memory was ever retrieved or ever useful, so nothing can sink on evidence. The content gate is a deny-list with measured limits. These are open, not hidden.
