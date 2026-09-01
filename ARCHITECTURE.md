@@ -202,25 +202,19 @@ flowchart TD
 
 ## Which models run, and which ones do not
 
-Retrieval is not one model. qmd holds three slots, all local GGUF weights run through llama.cpp — **nothing leaves the machine at query time, and no API key exists anywhere in this system.** For a memory store that matters more than it would elsewhere: the corpus is the most sensitive thing a team owns, and shipping it to a hosted embedder on every search would undo the content gate.
+Retrieval is not one model. qmd holds three model slots — embed, generate and rerank — and **Vestige uses only the first**. Which ones run explains every latency number above, so the choice is recorded here; the models themselves, their sizes and how to change them are [qmd's](https://github.com/tobi/qmd) to document, and restating them here would only go stale the next time it picks a different one.
 
-The three slots are named embed, generate and rerank in qmd's own configuration:
+| slot | used | why |
+|---|---|---|
+| embed | **yes** | one vector per query, one per chunk at index time. The lexical half of the query costs no model at all — BM25 over an index — so a warm query is 14 ms |
+| generate | no | the auto-expansion, HyDE included. ~500 ms per query, and a *hypothetical document* is generated text, so it lands in the ranking and moves between runs |
+| rerank | no | byte-identical hit lists on all 64 queries, for 2.7× the latency |
 
-| slot | model | size | what it costs | used here |
-|---|---|---|---|---|
-| embed | embeddinggemma-300M (Q8_0) | 300M | milliseconds per query | **yes** — one vector per query, and one per chunk at index time |
-| generate | qmd-query-expansion-1.7B (Q4_K_M) | 1.7B | ~500 ms per query | **no** — this is the auto-expansion, HyDE included |
-| rerank | Qwen3-Reranker-0.6B (Q8_0) | 600M | ~2.6 s per query | **no** |
+Both refusals are measurements rather than preferences. Skipping expansion took rank-1 from 0.979 (sd 0.018) to 1.000 (sd 0.000) and a warm query from 543 ms to 14 ms — roughly 97% of what used to be called "search latency" was a model writing a paragraph nobody read.
 
-Two of the three are deliberately off, and both decisions are measurements rather than preferences.
+Everything runs locally through qmd: **nothing leaves the machine at query time and there is no API key anywhere in this system.** That matters more for a memory store than it would elsewhere — the corpus is the most sensitive thing a team owns, and a hosted embedder on every search would undo the content gate.
 
-**The 1.7B expansion model is skipped** because Vestige states its sub-queries instead of asking for them to be invented. That model's job is to turn a plain query into lexical, vector and hypothetical-document variants — and a *hypothetical document* is generated text, so it lands in the ranking and moves between runs. Skipping it took rank-1 from 0.979 (sd 0.018) to 1.000 (sd 0.000), and a warm query from 543 ms to 14 ms. Roughly 97% of what used to be called "search latency" was a 1.7B model writing a paragraph nobody read.
-
-**The 0.6B reranker is skipped** because on this corpus it returns byte-identical hit lists — same documents, same order, all 64 queries — for 2.7× the latency.
-
-**The 300M embedder does all the work that remains**, and the lexical half of each query costs no model at all: BM25 over an index. That pairing is why a warm query is 14 ms rather than seconds — the only inference in the path is embedding a single short string.
-
-> The trade this accepts: expansion exists for a query worded unlike the documents it should find, and this corpus does not stress that case. `VESTIGE_QUERY_SHAPE=expand` puts the 1.7B model back for a workload that needs it, and the cost of doing so is now documented rather than hidden.
+> The trade this accepts: expansion exists for a query worded unlike the documents it should find, and this corpus does not stress that case. `VESTIGE_QUERY_SHAPE=expand` puts it back, at the cost now documented.
 
 ## The sync path, and why the order matters
 
