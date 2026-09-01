@@ -98,12 +98,40 @@ function classCount(s: string): number {
 // longer than 512 characters.
 const ENTROPY_CANDIDATE = /\b[A-Za-z0-9+/_-]{32,512}={0,2}\b/g;
 
+/**
+ * A word-like part: CamelCase, lowerCamelCase, a lowercase word, an ALLCAPS
+ * constant, or a short number. Digits are allowed only as a SUFFIX.
+ *
+ * That last restriction is what keeps secrets caught. Allowing digits anywhere
+ * made `A1B2C3D4E5F6...` read as an all-caps constant, and letters interleaved
+ * with digits is what a hex or base64 run looks like, never what a word does.
+ */
+const WORDY = /^(?:[A-Z][a-z]+)+[0-9]*$|^[a-z]+(?:[A-Z][a-z]+)*[0-9]*$|^[A-Z]+[0-9]*$|^[0-9]{1,4}$/;
+
+function isIdentifierLike(tok: string): boolean {
+	const parts = tok.split(/[_-]/);
+	if (parts.some((p) => p === "")) return false;
+	return parts.every((p) => WORDY.test(p));
+}
+
 function highEntropyFindings(text: string): Finding[] {
 	const out: Finding[] = [];
 	for (const m of text.matchAll(ENTROPY_CANDIDATE)) {
 		const tok = m[0];
-		// An identifier: lowercase words joined by separators, no case mixing.
-		if (/^[a-z0-9]+(?:[_-][a-z0-9]+)+$/.test(tok)) continue;
+		// An identifier rather than a secret. The discriminator is that an
+		// identifier's parts are WORDS: `TestTransactionJournal_ConcurrentWrites`
+		// is three words and a separator, `ghp_16C7e42F292c6912E7710c838347Ae178B4a`
+		// is a prefix and a random run.
+		//
+		// This used to exempt lowercase-only identifiers, so any mixed-case name
+		// over 32 characters was quarantined — Go and C# test names especially,
+		// `TestPaymentFlow_Retries` staying clean purely by being shorter. Two
+		// legitimate memories out of 156 were held back by it, and a quarantine is
+		// silent to the writer.
+		//
+		// Each CamelCase part must carry three real letters, so a hex run like
+		// `A1B2C3D4` is not mistaken for words.
+		if (isIdentifierLike(tok)) continue;
 		if (classCount(tok) < 3) continue;
 		if (entropyBits(tok) < 3.5) continue;
 		out.push({ rule: "HIGH-ENTROPY", match: tok });

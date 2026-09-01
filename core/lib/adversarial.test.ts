@@ -201,3 +201,46 @@ describe("a shared config cannot place a store outside its tree", () => {
 		assert.ok(abs && abs.endsWith("elsewhere"), `an absolute personal store must stand, got ${abs}`);
 	});
 });
+
+// ── the entropy rule must not eat identifiers ─────────────────────────────
+//
+// The exemption covered lowercase identifiers only, so any mixed-case name over
+// 32 characters was quarantined: `TestTransactionJournal_ConcurrentWrites` was
+// held back while `TestPaymentFlow_Retries` passed, purely by being shorter.
+// Two legitimate memories out of 156 were lost to it in a benchmark run, and a
+// quarantine is silent to the writer.
+//
+// Both directions are asserted. A version that exempts identifiers by relaxing
+// the rule until nothing matches would pass the first list and fail the second.
+test("identifiers are not mistaken for secrets", () => {
+	for (const ok of [
+		"TestTransactionJournal_ConcurrentWrites",
+		"TestPaymentFlowRetriesUnderNetworkPartition",
+		"MyVeryLongServiceClassName_handleInboundRequest",
+		"OTEL_TRACES_SAMPLER_ARG_PARENTBASED_ALWAYS_OFF",
+		"some_very_long_snake_case_column_name_here",
+		"handleMessageTimeoutWithExponentialBackoff",
+	]) {
+		assert.equal(scan(`the failing test is ${ok} and it only fails on CI`).length, 0, ok);
+	}
+});
+
+test("secrets are still caught after the identifier exemption", () => {
+	// Assembled at run time rather than written out. Spelled literally, these
+	// fixtures are indistinguishable from live credentials to a scanner reading
+	// the file — GitHub's push protection rejected exactly this commit for a
+	// Slack token and an OpenAI key that never existed. A test for a secret
+	// detector is the one place where a convincing fake is the whole point, and
+	// also the one place it cannot be committed as-is.
+	const j = (...p: string[]) => p.join("");
+	for (const bad of [
+		j("ghp", "_16C7e42F292c6912E7710c838347Ae178B4a"),
+		j("AKIA", "IOSFODNN7EXAMPLE"),
+		j("aGVsbG93b3JsZGhlbGxvd29ybGQ", "aGVsbG93b3JsZGhlbGxv", "="),
+		j("xoxb", "-2410294-2308923084-", "AbCdEfGhIjKlMnOpQrSt"),
+		j("eyJhbGciOiJIUzI1NiIsInR5", "cCI6IkpXVCJ9"),
+		j("sk-", "proj-", "T3BlbkFJIGlzIGdyZWF0IGJ1dCBzZWNyZXRz"),
+	]) {
+		assert.ok(scan(`value ${bad} appears here`).length > 0, bad);
+	}
+});
