@@ -65,21 +65,52 @@ export function confirmMemory(storePath: string, rel: string, by: string | null,
 	try { text = readFileSync(full, "utf8"); } catch (e) { return { ok: false, count: 0, detail: String((e as Error).message) }; }
 
 	const stamp = `${now.toISOString().slice(0, 10)}${by ? ` by ${by}` : ""}`;
-	const already = new RegExp(`^confirmations:.*${stamp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "m").test(text);
-	if (already) {
+	if (new RegExp(`^confirmations:.*${stamp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "m").test(text)) {
 		const n = Number((text.match(/^confirmed_count:\s*(\d+)/m) ?? [])[1] ?? 1);
 		return { ok: true, count: n, detail: "already confirmed today by this caller" };
 	}
 
 	const count = Number((text.match(/^confirmed_count:\s*(\d+)/m) ?? [])[1] ?? 0) + 1;
-	let out = text;
-	out = /^confirmed_count:/m.test(out)
-		? out.replace(/^confirmed_count:.*$/m, `confirmed_count: ${count}`)
-		: out.replace(/^(scope: .+)$/m, `$1\nconfirmed_count: ${count}`);
-	out = /^confirmations:/m.test(out)
-		? out.replace(/^confirmations:(.*)$/m, (_m, rest) => `confirmations:${rest.replace(/\]\s*$/, "")}, ${JSON.stringify(stamp)}]`)
-		: out.replace(/^(confirmed_count: .+)$/m, `$1\nconfirmations: [${JSON.stringify(stamp)}]`);
+
+	/**
+	 * Write into the frontmatter BLOCK, not next to a line that may not exist.
+	 *
+	 * The first version anchored on `^(scope: .+)$`. Files this system wrote
+	 * always have that line, so it worked on the happy path and silently did
+	 * nothing on anything else — an imported MCS memory has no frontmatter at
+	 * all, and `scope:platform` or `Scope: project` miss the pattern too. It
+	 * then wrote the file back unchanged and returned ok, so a confirmation
+	 * could be reported, recorded nowhere, and never noticed. `import.mjs`
+	 * exists specifically to ingest those files.
+	 */
+	const fm = text.match(/^(---\r?\n)([\s\S]*?)(\r?\n---\r?\n)/);
+	let out: string;
+	if (fm) {
+		let block = fm[2]!;
+		block = /^confirmed_count:/m.test(block)
+			? block.replace(/^confirmed_count:.*$/m, `confirmed_count: ${count}`)
+			: `${block}\nconfirmed_count: ${count}`;
+		block = /^confirmations:/m.test(block)
+			? block.replace(/^confirmations:(.*)$/m, (_m, rest: string) => `confirmations:${rest.replace(/\]\s*$/, "")}, ${JSON.stringify(stamp)}]`)
+			: `${block}\nconfirmations: [${JSON.stringify(stamp)}]`;
+		out = `${fm[1]}${block}${fm[3]}${text.slice(fm[0].length)}`;
+	} else {
+		// No frontmatter — an imported file. Give it one rather than dropping the
+		// confirmation on the floor.
+		out = `---\nconfirmed_count: ${count}\nconfirmations: [${JSON.stringify(stamp)}]\n---\n\n${text.replace(/^\uFEFF/, "")}`;
+	}
+
+	if (out === text) return { ok: false, count: 0, detail: "nothing was written — the file did not accept a confirmation marker" };
 	try { writeFileSync(full, out); } catch (e) { return { ok: false, count: 0, detail: String((e as Error).message) }; }
+
+	// Read back. A confirmation that reports success and left no trace is the
+	// bug this function already had once.
+	try {
+		if (!new RegExp(`^confirmed_count:\\s*${count}$`, "m").test(readFileSync(full, "utf8"))) {
+			return { ok: false, count: 0, detail: "confirmation did not persist" };
+		}
+	} catch { /* the write succeeded; a failed verification read is not a failure to record */ }
+
 	return { ok: true, count, detail: `confirmed ${count}x` };
 }
 

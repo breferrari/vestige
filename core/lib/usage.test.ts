@@ -116,3 +116,69 @@ describe("the usefulness signal has to discriminate", () => {
 		assert.equal(logged.length, r.hits.length, `search returned ${r.hits.length} memories but logged ${logged.length} — the candidate pool is leaking into the signal`);
 	});
 });
+
+describe("confirmation on files this system did not write", () => {
+	/**
+	 * The first version anchored on `^(scope: .+)$`. Files written here always
+	 * have that line, so it worked on the happy path and silently did nothing on
+	 * everything else — then wrote the file back unchanged and returned ok. A
+	 * confirmation could be reported, recorded nowhere, and never noticed.
+	 * import.mjs exists specifically to ingest files with no frontmatter.
+	 */
+	test("an imported file with no frontmatter is confirmed, not silently skipped", async () => {
+		const { confirmMemory } = await import(`./usage.ts?${Math.random()}`);
+		const { mkdirSync, writeFileSync, readFileSync } = await import("node:fs");
+		const store = join(home, "imported");
+		mkdirSync(store, { recursive: true });
+		const rel = "learning_orm_batch_insert_memory_spike.md";
+		writeFileSync(join(store, rel), "# ORM batch insert memory spike\n\n**Applies to:** payments\n\n## Problem\nBatches over 500 rows spike RSS.\n");
+
+		const r = confirmMemory(store, rel, "payments");
+		assert.equal(r.ok, true, r.detail);
+		assert.match(readFileSync(join(store, rel), "utf8"), /^confirmed_count: 1$/m, "reporting a confirmation that left no trace is the bug this had");
+	});
+
+	test("a frontmatter without a scope line still takes the marker", async () => {
+		const { confirmMemory } = await import(`./usage.ts?${Math.random()}`);
+		const { mkdirSync, writeFileSync, readFileSync } = await import("node:fs");
+		const store = join(home, "odd");
+		mkdirSync(store, { recursive: true });
+		const rel = "odd.md";
+		writeFileSync(join(store, rel), "---\ntitle: something\n---\n\n# Something\n\nA lesson.\n");
+		const r = confirmMemory(store, rel, "x");
+		assert.equal(r.ok, true, r.detail);
+		assert.match(readFileSync(join(store, rel), "utf8"), /^confirmed_count: 1$/m);
+	});
+});
+
+describe("platform scope is readable, not just writable", () => {
+	/**
+	 * Every read built its caller as `{ project, platforms: [] }` and no MCP
+	 * argument could fill it, so isVisibleTo dropped every platform-scoped
+	 * memory for every caller — while remember accepted them, reported success,
+	 * and the tool schema recommends the scope. Stored, confirmed written,
+	 * visible to nobody.
+	 */
+	test("a platform memory reaches a caller on that platform", async () => {
+		const { remember, recall } = await api();
+		const { writeFileSync } = await import("node:fs");
+		writeFileSync(join(repo, "package.json"), '{"name":"app"}\n');
+		const w = remember({ title: "Pin the lockfile in CI or installs drift", body: "A floating lockfile makes CI install a different tree than the developer, so a green local run proves nothing about the build.", scope: "platform", platforms: ["node"], confidence: "inferred" }, { cwd: repo });
+		assert.equal(w.ok, true, w.errors?.join("; "));
+		assert.equal(recall({ cwd: repo }).length, 1, "a platform-scoped memory that nobody can read is worse than a refused write");
+	});
+
+	test("and does NOT reach a caller on another platform", async () => {
+		const { remember, recall } = await api();
+		const { writeFileSync, mkdirSync } = await import("node:fs");
+		const { execFileSync } = await import("node:child_process");
+		writeFileSync(join(repo, "package.json"), '{"name":"app"}\n');
+		remember({ title: "Pin the lockfile in CI or installs drift", body: "A floating lockfile makes CI install a different tree than the developer, so a green local run proves nothing.", scope: "platform", platforms: ["node"], confidence: "inferred" }, { cwd: repo });
+
+		const other = join(home, "other-repo");
+		mkdirSync(other, { recursive: true });
+		execFileSync("git", ["init", "-q", other]);
+		writeFileSync(join(other, "Cargo.toml"), '[package]\nname = "x"\n');
+		assert.equal(recall({ cwd: other }).length, 0, "default deny must survive the fix");
+	});
+});

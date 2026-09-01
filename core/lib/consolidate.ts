@@ -19,7 +19,7 @@
  * someone made once.
  */
 import { readPool, visibleTo, type PoolEntry } from "./memory.ts";
-import { activeStores, currentProject } from "./stores.ts";
+import { activeStores, callerPlatforms, currentProject } from "./stores.ts";
 import { existsSync, readFileSync } from "node:fs";
 
 export interface Cluster {
@@ -61,7 +61,7 @@ export function findClusters(opts: { cwd?: string; threshold?: number; minMember
 		if (!existsSync(path)) continue;
 		for (const e of readPool(path)) all.push({ e, store: path });
 	}
-	const caller = { project: currentProject(cwd), platforms: [] as string[] };
+	const caller = { project: currentProject(cwd), platforms: callerPlatforms(cwd) };
 	const visible = new Set(visibleTo(all.map((x) => x.e), caller).map((e) => e.full));
 	const pool = all.filter((x) => visible.has(x.e.full));
 

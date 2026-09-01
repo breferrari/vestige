@@ -34,7 +34,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { capture as rawCapture, readPool, visibleTo, rankBySpecificity, isForeign, type PoolEntry, type CaptureResult } from "./memory.ts";
 import { visibilityReason, isVisibleTo } from "./om/memory-recall.ts";
-import { activeStores, currentProject, ensureStore, loadConfig, routeFor, storePath, type ScopeName, type StoreConfig } from "./stores.ts";
+import { activeStores, callerPlatforms, currentProject, ensureStore, loadConfig, routeFor, storePath, type ScopeName, type StoreConfig } from "./stores.ts";
 import { validateMemory, type MemoryInput } from "./om/memory-write.ts";
 import type { Caller } from "./om/memory-recall.ts";
 
@@ -169,7 +169,7 @@ export interface RecallHit {
 /** Everything this caller may see, from BOTH stores, ranked. */
 export function recall(opts: { cwd?: string; limit?: number; caller?: Caller; noteUse?: boolean } = {}): RecallHit[] {
 	const cwd = opts.cwd ?? process.cwd();
-	const caller: Caller = opts.caller ?? { project: currentProject(cwd), platforms: [] };
+	const caller: Caller = opts.caller ?? { project: currentProject(cwd), platforms: callerPlatforms(cwd) };
 
 	const all: { e: PoolEntry; tier: string }[] = [];
 	for (const { config, path } of activeStores(cwd)) {
@@ -329,7 +329,7 @@ export interface Explanation {
  */
 export function explain(opts: { cwd?: string; caller?: Caller } = {}): Explanation[] {
 	const cwd = opts.cwd ?? process.cwd();
-	const caller: Caller = opts.caller ?? { project: currentProject(cwd), platforms: [] };
+	const caller: Caller = opts.caller ?? { project: currentProject(cwd), platforms: callerPlatforms(cwd) };
 	const rows: Explanation[] = [];
 	for (const { config, path } of activeStores(cwd)) {
 		if (!existsSync(path)) continue;

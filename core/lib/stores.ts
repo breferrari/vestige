@@ -25,7 +25,7 @@
  * with no config file behaves as before.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 
@@ -264,6 +264,52 @@ export function activeStores(cwd: string = process.cwd()): { config: StoreConfig
 		if (p) out.push({ config: s, path: p });
 	}
 	return out;
+}
+
+/**
+ * What platforms this caller belongs to.
+ *
+ * Without this, `platform` scope is WRITE-ONLY. Every read built its caller as
+ * `{ project, platforms: [] }`, no MCP argument could fill it, and
+ * `isVisibleTo` therefore dropped every platform-scoped memory for every
+ * caller — while `remember` accepted them and reported success, and the tool
+ * schema actively recommends the scope. A memory that is stored, confirmed
+ * written, and visible to nobody is the worst failure this system can have.
+ *
+ * Declared configuration wins. Detection is a convenience for the common case
+ * so that a repo that never configures anything still works, and it is
+ * deliberately shallow: guessing a platform wrongly widens reach, so only
+ * unambiguous markers count.
+ */
+export function callerPlatforms(cwd: string = process.cwd()): string[] {
+	const declared = (() => {
+		for (const f of [repoRoot(cwd) ? join(repoRoot(cwd)!, ".vestige", "config.json") : null, join(vestigeHome(), "config.json")].filter(Boolean) as string[]) {
+			try {
+				const parsed = JSON.parse(readFileSync(f, "utf8"));
+				const list = parsed?.platforms;
+				if (Array.isArray(list) && list.length) return list.filter((x: unknown): x is string => typeof x === "string" && Boolean(x.trim()));
+			} catch { /* absent or malformed: fall through to the next candidate */ }
+		}
+		return null;
+	})();
+	if (declared) return [...new Set(declared.map((p) => p.toLowerCase()))];
+
+	const root = repoRoot(cwd);
+	if (!root) return [];
+	const has = (f: string) => existsSync(join(root, f));
+	const found = new Set<string>();
+	if (has("package.json")) found.add("node");
+	if (has("Cargo.toml")) found.add("rust");
+	if (has("go.mod")) found.add("go");
+	if (has("Package.swift")) found.add("swift");
+	if (has("pubspec.yaml")) found.add("flutter");
+	if (has("Gemfile")) found.add("ruby");
+	if (has("pyproject.toml") || has("requirements.txt")) found.add("python");
+	if (has("pom.xml") || has("build.gradle") || has("build.gradle.kts")) found.add("jvm");
+	try {
+		if (readdirSync(root).some((e) => e.endsWith(".xcodeproj") || e.endsWith(".xcworkspace"))) { found.add("ios"); found.add("swift"); }
+	} catch { /* unreadable root */ }
+	return [...found];
 }
 
 export function currentProject(cwd: string = process.cwd()): string | null {

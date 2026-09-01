@@ -24,7 +24,7 @@ import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, linkSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readPool, visibleTo, type PoolEntry } from "./memory.ts";
-import { activeStores, currentProject, vestigeHome } from "./stores.ts";
+import { activeStores, callerPlatforms, currentProject, vestigeHome } from "./stores.ts";
 import { ensureQmd, runQmd } from "../setup/qmd.ts";
 import type { Caller } from "./om/memory-recall.ts";
 
@@ -122,7 +122,7 @@ export interface IndexResult {
  */
 export function ensureIndex(opts: { cwd?: string; caller?: Caller } = {}): IndexResult {
 	const cwd = opts.cwd ?? process.cwd();
-	const caller: Caller = opts.caller ?? { project: currentProject(cwd), platforms: [] };
+	const caller: Caller = opts.caller ?? { project: currentProject(cwd), platforms: callerPlatforms(cwd) };
 
 	const all: PoolEntry[] = [];
 	for (const { path } of activeStores(cwd)) {

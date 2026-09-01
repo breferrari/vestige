@@ -182,6 +182,8 @@ flowchart TD
     style Y fill:#c5f6fa,stroke:#0c8599,color:#16181d
 ```
 
+**A caller's platforms come from configuration, or are detected.** `platform` reach is otherwise write-only: every read built its caller with an empty platform list, no tool argument could fill it, and so every platform-scoped memory was accepted, reported as stored, and then withheld from everybody. A repo declares `platforms` in `.vestige/config.json`; failing that, unambiguous markers are used (`package.json` → node, `Cargo.toml` → rust, an `.xcodeproj` → ios and swift). Declaration wins, because guessing a platform widens reach.
+
 **Default deny is load-bearing.** A caller with no identity sees only `general` — the safest reading of "I do not know who you are". A memory whose frontmatter will not parse is visible to nobody: a memory whose reach cannot be read has not declared a reach.
 
 **The index is per caller and named.** Isolation is a property of the index *name*, not of a directory — running `qmd init` in a per-caller directory silently creates nothing and every collection lands in the shared default index, which would put every project's memories in one place underneath a filter whose entire job is to keep them apart. Index builds are serialised with a cross-process lock, because two sessions building at once contend on one shared cache and the loser would otherwise degrade to unranked results without saying so.
