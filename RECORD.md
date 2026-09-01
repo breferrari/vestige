@@ -29,7 +29,7 @@ Each rung adds one thing to the rung above it.
 | V4a · one index per project | 1.000 | 0.969 | 0.984 | 0.00 |
 | V4b · rank globally, filter afterwards (depth 5) | 0.375 | 0.375 | 0.375 | 0.00 |
 | V4b · the same, at the engine's maximum depth of 20 | 0.953 | 0.938 | 0.945 | 0.00 |
-| **Vestige** | **1.000** | **1.000** | **1.000** | **0.00** |
+| **Vestige** | **1.000** | **0.984–1.000** | **0.992–1.000** | **0.00** |
 
 Four conclusions, and the last two are the architecture.
 
@@ -52,7 +52,7 @@ The prior art is [`mcs-cli/memory`](https://github.com/mcs-cli/memory), and it r
 | MCS before qmd, shared pool | 0.297 | 0.078 | 0.157 | 4.63 |
 | MCS with qmd, **one index per project** | 1.000 | **0.984** | 0.992 | 0.00 |
 | MCS with qmd, **one shared pool** | 0.359 | **0.078** | 0.167 | 4.63 |
-| **Vestige** | 1.000 | **1.000** | 1.000 | 0.00 |
+| **Vestige** | 1.000 | **0.984–1.000** | 0.992–1.000 | 0.00 |
 
 **The honest reading is not "ours wins."**
 
@@ -86,9 +86,13 @@ A reach model is only as good as the reach people declare, and people declare to
 | a bare reach filter | 0.391 | 0.628 | 3.53 | 52.7 |
 | with reach narrowed at write time | **0.984** | 0.992 | **0.00** | 11.4 |
 
-The full end-to-end run at 24% over-claim scores **identically to the correctly-scoped run** — 1.000 / 1.000 / 0.00. Every over-claim is narrowed at the point of writing, because a memory that claims `general` while naming specific projects has told you its real reach in the same breath. The pool ends up holding zero falsely-general memories, so there is nothing for the filter to be defeated by.
+Over three repetitions of each arm, the end-to-end run at 24% over-claim scores rank-1 **0.938–0.984** against **0.984–1.000** correctly scoped, with found@5 at 1.000 and zero foreign documents in both. So over-claiming does cost something — roughly a twentieth of a rank — but the collapse to 0.391 does not happen, and the difference between those two outcomes is the whole point.
+
+Every over-claim is narrowed at the point of writing, because a memory that claims `general` while naming specific projects has told you its real reach in the same breath. The pool ends up holding zero falsely-general memories, so there is nothing for the filter to be defeated by.
 
 This is the single most important robustness property in the system: **the filter is not asked to survive bad declarations, because bad declarations do not get written.**
+
+> A single run of each arm scored them identically, and that was published here before it was repeated. Three runs showed the fixture varies by one query, so every figure in this document is now a range over repetitions rather than whichever run happened to come first.
 
 ---
 
@@ -116,16 +120,17 @@ Retrieval quality was benchmarked for a week before anyone timed a query. The fi
 
 That is not a polish issue. For a system whose entire protocol is *consult the store before answering*, a slow search is a search the agent learns to avoid, which silently undoes the behavioural layer that makes any of the rest happen. The fix was to stop paying the startup cost per query: the search engine speaks MCP over stdio, so it is spawned once and kept resident for the session.
 
-Latency is now reported split, because one mean over both describes neither:
+Latency is reported split, because one mean over both describes neither. Measured over three repetitions per arm on an idle machine — ambient load 0.54–0.65 before each run, sampled *before* the run starts, since a sample taken afterwards reports the benchmark's own footprint:
 
 | | |
 |---|---|
-| first query for a project (builds that caller's view index) | seconds, not milliseconds |
-| every subsequent query | roughly an order of magnitude less |
+| first query for a project — builds that caller's view index | **5.0–5.3 s** |
+| every subsequent query in the session | **305–559 ms** |
+| median across all queries | **313–337 ms** |
 
-**Absolute figures are deliberately not published here.** Every timing this machine has produced under load has been wrong, once by a factor that inverted the conclusion, and the current numbers were taken on a machine in use. Each run therefore stamps its own load average into its results file, and `reproduce.sh` refuses to run above a threshold — a number without its conditions is not interpretable later, and "I will remember the machine was busy" has failed every time it was relied upon.
+The median sits near the steady state because most queries are not the first for their project. Reporting the median alone — which an earlier draft of this document did — hides a five-second first hit entirely, and that first hit is the one a new caller actually experiences.
 
----
+Each run stamps its own load average into its results file, because a timing without its conditions is not interpretable later and "I will remember the machine was busy" has failed every time it was relied upon.
 
 ## A negative result, kept
 
