@@ -58,6 +58,16 @@ function signature(entries: readonly PoolEntry[]): string {
 }
 
 /**
+ * Contention budget for the embed step. Six attempts with full jitter capped at
+ * four seconds is roughly twelve seconds of patience — enough to outlast
+ * another caller's embed, and still bounded so a genuinely broken qmd fails
+ * rather than hanging a turn.
+ */
+const EMBED_ATTEMPTS = 6;
+const EMBED_BACKOFF_CAP_MS = 4000;
+
+
+/**
  * Serialise index builds across PROCESSES.
  *
  * qmd keeps every named index in one shared cache directory, so two Vestige
@@ -167,7 +177,16 @@ export function ensureIndex(opts: { cwd?: string; caller?: Caller } = {}): Index
 		// that are no longer visible to this caller.
 		let lastErr = "";
 		let built = false;
-		for (let attempt = 1; attempt <= 4 && !built; attempt++) {
+		// Wait long enough for the thing actually being waited on.
+		//
+		// The previous bound — 4 attempts, backoff capped at 960ms, under two
+		// seconds in total — was sized for a lock held briefly. It is not: the
+		// holder is another caller's EMBED, which takes seconds on a real store.
+		// So the loser gave up and the caller silently degraded to unranked
+		// facet ordering, which is the difference between rank-1 0.98 and 0.09.
+		// It surfaced as a test that failed roughly one run in ten and passed on
+		// the retry — the shape that gets waved through.
+		for (let attempt = 1; attempt <= EMBED_ATTEMPTS && !built; attempt++) {
 			runQmd(["--index", name, "collection", "remove", "memories"], { cwd: idx });
 			const add = runQmd(["--index", name, "collection", "add", view, "--name", "memories"], { cwd: idx });
 			if (!add.ok) { lastErr = `collection add: ${add.stderr.slice(0, 160)}`; }
@@ -189,7 +208,7 @@ export function ensureIndex(opts: { cwd?: string; caller?: Caller } = {}): Index
 				lastErr = skipped ? "embed skipped: another embed holds qmd's global lock" : `embed: ${emb.stderr.slice(0, 160)}`;
 			}
 			// full jitter, capped — a contended store clears in milliseconds
-			const cap = Math.min(1500, 60 * 2 ** attempt);
+			const cap = Math.min(EMBED_BACKOFF_CAP_MS, 60 * 2 ** attempt);
 			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.random() * cap);
 		}
 		if (!built) return { ok: false, dir: null, docs: visible.length, rebuilt: true, detail: `index build failed after retries — ${lastErr}` };

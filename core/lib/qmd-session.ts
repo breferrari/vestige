@@ -149,8 +149,21 @@ export async function sessionQuery(
 		// first: a memory is found by the words of the problem more often than by
 		// a paraphrase of it.
 		//
-		// The default stays on the measured shape until the A/B says otherwise.
-		const typed = (process.env.VESTIGE_QUERY_SHAPE ?? "expand") === "typed";
+		// Measured, three runs each, alternating arms on an idle machine:
+		//
+		//              found@5   rank-1          MRR     warm query
+		//   expand      1.000    0.979 sd 0.018  0.989   543 ms
+		//   typed       1.000    1.000 sd 0.000  1.000    14 ms
+		//
+		// Better, perfectly repeatable, and 38x faster — because the ~500ms was
+		// an LLM writing a hypothetical document on EVERY search, and that
+		// document is also what made the ranking unrepeatable.
+		//
+		// Caveat kept deliberately: HyDE exists for queries whose wording differs
+		// from the documents'. This fixture's queries derive from its documents,
+		// so it under-stresses the case expansion is for. `expand` remains one
+		// environment variable away for a workload that needs it.
+		const typed = (process.env.VESTIGE_QUERY_SHAPE ?? "typed") !== "expand";
 		const args = typed
 			? { searches: [{ type: "lex", query: opts.query }, { type: "vec", query: opts.query }], intent: opts.query, limit: opts.limit, rerank: opts.rerank }
 			: { query: opts.query, limit: opts.limit, rerank: opts.rerank };
