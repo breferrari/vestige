@@ -77,6 +77,44 @@ for (const s of cfg.stores) {
   }
 }
 
+// ── stuck states ──────────────────────────────────────────────────────────
+//
+// These are the conditions that make sync fail while everything else looks
+// healthy. They are checked for EVERY store with a remote, not only `external`:
+// a `local` store pointed at a memories repository is a perfectly ordinary
+// setup and was previously invisible to this section.
+out.push("", "stuck states");
+let stuck = 0;
+for (const s of cfg.stores) {
+  const p = storePath(s, cwd);
+  if (!p || !existsSync(p)) continue;
+  const git = (args) => { try { return execFileSync("git", args, { cwd: p, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch { return null; } };
+  if (git(["rev-parse", "--is-inside-work-tree"]) !== "true") continue;
+
+  const gitDir = git(["rev-parse", "--git-dir"]);
+  if (gitDir) {
+    const abs = gitDir.startsWith("/") ? gitDir : join(p, gitDir);
+    if (existsSync(join(abs, "rebase-merge")) || existsSync(join(abs, "rebase-apply"))) {
+      fail(`${s.name}: a rebase is in progress — every sync fails until it is finished or aborted, and the failures are swallowed by design`);
+      stuck++;
+    }
+  }
+  if (s.kind !== "external" && git(["remote"])) {
+    const ahead = git(["rev-list", "--count", "@{upstream}..HEAD"]);
+    if (ahead === null) { out.push(warn(`${s.name}: has a remote but no upstream — a bare push fails, and quietly`)); stuck++; }
+    else if (Number(ahead) > 0) { out.push(warn(`${s.name}: ${ahead} commit(s) never pushed — they exist only on this machine`)); stuck++; }
+  }
+
+  // Quarantine sits BESIDE the store so it is never staged, which also means
+  // git will never mention it and nothing else will either.
+  const q = join(p, "..", "memories-quarantine");
+  if (existsSync(q)) {
+    const n = readdirSync(q).filter((f) => f.endsWith(".md")).length;
+    if (n) { out.push(warn(`${n} quarantined memor${n === 1 ? "y" : "ies"} in ${q} — each carried something that must not leave this machine; read them, then delete or redact`)); stuck++; }
+  }
+}
+if (!stuck) out.push(ok("nothing stuck"));
+
 // ── visibility ────────────────────────────────────────────────────────────
 out.push("", "visibility");
 try {
