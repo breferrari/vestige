@@ -35,7 +35,9 @@ The **distribution model**, and most of what makes memory actually happen rather
 
 ## From obsidian-mind
 
-The **reach model** and the **write contract**. Several of these are used unmodified — `core/lib/om/` is OM's code, vendored rather than reimplemented.
+The **reach model** and the **write contract**. `core/lib/om/` is OM's code, vendored rather than reimplemented, and used unmodified with one documented exception.
+
+> **The exception, and why.** OM's `facetsOf` parses a `promoted:` marker — the vault note a capture was promoted into, so the vault can serve the corrected block rather than the raw capture. Vestige has no vault and never reads the field. Parsing it pulled in `memory-promoted`, and through it `mcp-exposure`, `mcp-qmd-client` and `read-head`: **1,815 lines of vault-exposure policy**, more than the reach model itself, sitting between a reader and `isVisibleTo`. The parse is replaced by a null and those modules are gone. The field stays on the interface as a placeholder so the shape still matches upstream and a re-vendor is a small diff.
 
 | | What it is |
 |---|---|

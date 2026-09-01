@@ -26,7 +26,22 @@
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { MEMORY_ROOT, MEMORY_SOURCE, AGENT_SOURCES } from "./memory-write.ts";
-import { parsePromotedMarker, type PromotedRef } from "./memory-promoted.ts";
+/**
+ * DIVERGENCE FROM UPSTREAM obsidian-mind.
+ *
+ * `promoted` is a vault concept: it points at the note a capture was promoted
+ * into, so the vault can serve the corrected block instead of the raw capture.
+ * Vestige has no vault and never reads the field — but importing it pulled in
+ * memory-promoted, and through it mcp-exposure, mcp-qmd-client and read-head:
+ * 1,815 lines of vault-exposure policy loaded into a memory plugin that has no
+ * exposure policy, sitting between a reader and `isVisibleTo`.
+ *
+ * The field is kept on the interface as an always-null placeholder so the shape
+ * still matches upstream and a future re-vendor is a small diff rather than a
+ * merge. Only the parse is gone.
+ */
+type PromotedRef = never;
+const parsePromotedMarker = (_v: unknown): PromotedRef | null => null;
 import { resolveSupersedes } from "./memory-supersede.ts";
 
 // Re-exported so a reader can take the marker from the module it reads with,
