@@ -167,7 +167,7 @@ export interface RecallHit {
 }
 
 /** Everything this caller may see, from BOTH stores, ranked. */
-export function recall(opts: { cwd?: string; limit?: number; caller?: Caller } = {}): RecallHit[] {
+export function recall(opts: { cwd?: string; limit?: number; caller?: Caller; noteUse?: boolean } = {}): RecallHit[] {
 	const cwd = opts.cwd ?? process.cwd();
 	const caller: Caller = opts.caller ?? { project: currentProject(cwd), platforms: [] };
 
@@ -184,7 +184,11 @@ export function recall(opts: { cwd?: string; limit?: number; caller?: Caller } =
 	// Note what was actually shown, locally. Never in the memory: a shared store
 	// is reviewed in pull requests, and per-reader telemetry does not belong in
 	// a file other people read.
-	noteRetrieved(out.map((e) => e.name));
+	// Only when this list is what the caller is actually shown. `search` uses
+	// recall as its CANDIDATE POOL at limit 500 — logging there marked the whole
+	// visible set as retrieved on every query, and usefulness then treated
+	// everything as useful. A signal that fires for all rows is not a signal.
+	if (opts.noteUse !== false) noteRetrieved(out.map((e) => e.name));
 	return out.map((e) => ({
 		name: e.name,
 		full: e.full,
@@ -220,10 +224,10 @@ export function hasQmd(): boolean {
  * spawn: 18ms warm against 2748ms per invocation, which is the difference
  * between a search an agent calls freely and one it learns to avoid.
  */
-export async function search(query: string, opts: { cwd?: string; limit?: number } = {}): Promise<{ hits: RecallHit[]; engine: "qmd" | "facets"; note?: string }> {
+async function searchInner(query: string, opts: { cwd?: string; limit?: number } = {}): Promise<{ hits: RecallHit[]; engine: "qmd" | "facets"; note?: string }> {
 	const cwd = opts.cwd ?? process.cwd();
 	const limit = opts.limit ?? 10;
-	const base = recall({ cwd, limit: 500 });
+	const base = recall({ cwd, limit: 500, noteUse: false });
 	if (!query) return { hits: base.slice(0, limit), engine: "facets" };
 
 	// Build or refresh the caller's index. `search` once took an `indexDir` that
@@ -262,7 +266,14 @@ export async function search(query: string, opts: { cwd?: string; limit?: number
 	} catch { /* fall through to the CLI rather than failing the search */ }
 
 	try {
-		const r = runQmd(["--index", idx.index, "query", query, "-n", String(limit), ...(rerank ? [] : ["--no-rerank"]), "--format", "files"], { cwd: idx.dir });
+		// Same query SHAPE as the resident path. A bare string is auto-expanded by
+		// qmd into lex/vec/hyde, and hyde is an LLM writing a hypothetical answer
+		// — which is what makes results unrepeatable and costs ~500ms. The fast
+		// path stopped doing that; a fallback that quietly resumes it means the
+		// system has two different retrievals depending on whether a child
+		// process happened to be alive.
+		const structured = `intent: ${query}\nlex: ${query}\nvec: ${query}`;
+		const r = runQmd(["--index", idx.index, "query", structured, "-n", String(limit), ...(rerank ? [] : ["--no-rerank"]), "--format", "files"], { cwd: idx.dir });
 		if (!r.ok) return { hits: base.slice(0, limit), engine: "facets", note: "qmd query failed; fell back to facet order" };
 		const order = [...r.stdout.matchAll(/qmd:\/\/[^/]+\/([^\s:,?]+\.md)/g)].map((m) => m[1]!);
 		const hits = order.map(resolve).filter(Boolean) as RecallHit[];
@@ -270,6 +281,21 @@ export async function search(query: string, opts: { cwd?: string; limit?: number
 	} catch {
 		return { hits: base.slice(0, limit), engine: "facets", note: "qmd query threw; fell back to facet order" };
 	}
+}
+
+/**
+ * Record what the caller was actually shown — once, around every exit.
+ *
+ * The first version logged inside `recall`, which `search` uses as its candidate
+ * pool at limit 500: one query marked the entire visible set as retrieved, and
+ * usefulness then rated everything useful. Scattering the call across the six
+ * return paths below would have re-introduced it on the next edit, so it wraps
+ * instead.
+ */
+export async function search(query: string, opts: { cwd?: string; limit?: number } = {}): Promise<{ hits: RecallHit[]; engine: "qmd" | "facets"; note?: string }> {
+	const result = await searchInner(query, opts);
+	noteRetrieved(result.hits.map((h) => h.name));
+	return result;
 }
 
 

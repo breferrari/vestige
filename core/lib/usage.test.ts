@@ -87,3 +87,32 @@ describe("usefulness only breaks ties", () => {
 		assert.ok(many <= 8, `expected a bounded nudge, got ${many}`);
 	});
 });
+
+describe("the usefulness signal has to discriminate", () => {
+	/**
+	 * `search` uses `recall` as its candidate pool at limit 500. Logging inside
+	 * recall marked EVERY visible memory as retrieved on every query, and
+	 * usefulness then rated the whole store useful. A signal that fires for all
+	 * rows is not a signal.
+	 *
+	 * The test calls NOTHING but search. An earlier version established its
+	 * baseline with `recall({ noteUse: false })` — the same flag under test — so
+	 * with the bug restored the baseline was inflated too and the delta was
+	 * always zero. A probe that shares a switch with its subject measures the
+	 * switch, not the subject.
+	 */
+	test("one search marks only what it returned, not the whole visible set", async () => {
+		const { search } = await api();
+		for (const t of ["Retry with full jitter", "Bound the retry attempts", "Key caches on content", "Batch by partition", "Checkpoint between batches"]) await write(t);
+
+		const { readFileSync, existsSync } = await import("node:fs");
+		const logFile = join(home, "usage.json");
+		assert.equal(existsSync(logFile), false, "writing must not log a retrieval; the baseline depends on it");
+
+		const r = await search("retry jitter", { cwd: repo, limit: 2 });
+		const logged = Object.keys(JSON.parse(readFileSync(logFile, "utf8")));
+
+		assert.ok(r.hits.length <= 2, `limit should cap the hits, got ${r.hits.length}`);
+		assert.equal(logged.length, r.hits.length, `search returned ${r.hits.length} memories but logged ${logged.length} — the candidate pool is leaking into the signal`);
+	});
+});
