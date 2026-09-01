@@ -29,6 +29,8 @@ const run = (payload: Record<string, unknown>, env: Record<string, string> = {})
 };
 const turn = (s = "t") => run({ hook_event_name: "UserPromptSubmit", session_id: s });
 const spawn = (desc: string, s = "t", env = {}) => run({ hook_event_name: "PreToolUse", session_id: s, tool_name: "Task", tool_input: { description: desc } }, env);
+const BRIEF = "KB context:\n- retries use full jitter, see the sync note\n";
+const briefedSpawn = (desc: string, s = "t", env = {}) => run({ hook_event_name: "PreToolUse", session_id: s, tool_name: "Task", tool_input: { description: desc, prompt: BRIEF } }, env);
 const returned = (s = "t") => run({ hook_event_name: "PostToolUse", session_id: s, tool_name: "Task" });
 const searched = (s = "t") => run({ hook_event_name: "PostToolUse", session_id: s, tool_name: "mcp__vestige__search" });
 
@@ -39,16 +41,39 @@ describe("the barrier", () => {
 		turn();
 		assert.match(spawn("find out how auth works"), /search|recall/i);
 	});
-	test("a search in the same turn releases it", () => {
+
+	/**
+	 * The contract this hook enforces changed once it was watched in a live
+	 * session: SEARCHING IS NOT SUFFICIENT. A parent that searched and then
+	 * spawned in the same message has handed the child nothing — the child
+	 * starts empty and rediscovers what the parent just read, which is the whole
+	 * cost the store exists to avoid. What releases the barrier is evidence in
+	 * the spawn prompt that the child was briefed.
+	 */
+	test("a search alone does not release it — the child still gets nothing", () => {
 		turn(); searched();
-		assert.equal(spawn("find out how auth works").trim(), "");
+		assert.match(spawn("find out how auth works"), /KB context/i, "a searched-but-unbriefed spawn must still be advised against");
 	});
-	test("a new turn re-arms it — a stale search is not evidence", () => {
+	test("the advice names the missing half: brief, not search", () => {
 		turn(); searched();
-		assert.equal(spawn("find out how auth works").trim(), "");
-		returned(); // the delegation completes before the user's next prompt
+		const out = spawn("find out how auth works");
+		assert.match(out, /You searched/i, "telling someone who just searched to search again is how advice gets ignored");
+	});
+	test("a KB context block releases it", () => {
 		turn();
-		assert.match(spawn("find out how auth works"), /search|recall/i);
+		assert.equal(briefedSpawn("find out how auth works").trim(), "", "a briefed spawn is the outcome this hook wants; it must be silent");
+	});
+	test("a brief releases it even without a search — the child has what it needs either way", () => {
+		turn();
+		assert.equal(briefedSpawn("find out how auth works").trim(), "");
+	});
+	test("the block is checked for SHAPE, never for quality", () => {
+		turn();
+		// `KB context: none relevant.` is a legitimate brief: the parent searched
+		// and found nothing, and the child must not repeat that search. A gate
+		// that judged the bullets would reject this correct case.
+		const out = run({ hook_event_name: "PreToolUse", session_id: "t", tool_name: "Task", tool_input: { description: "find out how auth works", prompt: "KB context: none relevant." } });
+		assert.equal(out.trim(), "");
 	});
 });
 
@@ -106,10 +131,10 @@ describe("budget", () => {
 });
 
 describe("session isolation", () => {
-	test("one session's search does not release another's barrier", () => {
+	test("one session's search does not leak into another's advice", () => {
 		turn("a"); turn("b"); searched("a");
-		assert.equal(spawn("find out how auth works", "a").trim(), "");
-		assert.match(spawn("find out how auth works", "b"), /search|recall/i);
+		assert.match(spawn("find out how auth works", "a"), /You searched/i, "session a searched: it needs the brief advice");
+		assert.match(spawn("find out how auth works", "b"), /without consulting/i, "session b never searched: it needs the search advice");
 	});
 });
 
@@ -124,9 +149,9 @@ describe("sub-agent prompts", () => {
 	 */
 	test("a prompt during an in-flight delegation does not forget the parent's search", () => {
 		turn(); searched();
-		assert.equal(spawn("find out how auth works").trim(), "", "a searched turn must not be nudged");
+		assert.match(spawn("find out how auth works"), /You searched/i);
 		turn(); // the sub-agent's prompt, indistinguishable from the user's
-		assert.equal(spawn("find out how auth works").trim(), "", "the parent already searched; this must stay silent");
+		assert.match(spawn("find out how auth works"), /You searched/i, "the parent's search must survive the child's prompt");
 	});
 
 	test("a prompt during an in-flight delegation does not refill the nudge budget", () => {
@@ -148,7 +173,7 @@ describe("sub-agent prompts", () => {
 		turn(); searched();
 		spawn("find out how auth works");
 		turn();
-		assert.equal(spawn("find out how auth works").trim(), "");
+		assert.match(spawn("find out how auth works"), /You searched/i);
 	});
 
 	test("once the delegation returns, the next prompt does start a new turn", () => {

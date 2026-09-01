@@ -49,6 +49,17 @@
           }
         ]
       }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --experimental-strip-types --disable-warning=ExperimentalWarning \"${CLAUDE_PLUGIN_ROOT}/host/hooks/brief.ts\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

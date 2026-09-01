@@ -18,9 +18,17 @@ Before reasoning from scratch about a past decision, prior art, or an error you
 have not seen in this session: call \`search\` or \`recall\` first. The store is
 the record; your recollection of this session is not.
 
-Before delegating discovery to a sub-agent: search first. A sub-agent starts
-without what you already know, and rediscovering something the store already
-holds costs far more than the lookup.
+Before delegating discovery to a sub-agent: search first, then BRIEF THE CHILD.
+A sub-agent starts empty, so a parent that searched and then spawned in the same
+message has handed it nothing — the child rediscovers what you just read, at the
+cost of a whole sub-agent. Every spawn that reads the tree opens with:
+
+  KB context:
+  - <what the store already says, one bullet each>
+
+or the literal line \`KB context: none relevant.\` when the search found nothing.
+If what you found already names the files, read them yourself rather than
+spawning. Do not search and spawn in the same message.
 
 When this work produces knowledge that would still be true and still useful in a
 DIFFERENT repository, invoke the capture skill. Do not ask permission, and do
@@ -45,6 +53,26 @@ export const SIGNALS: readonly { id: string; test: RegExp; advice: string }[] = 
 		id: "convention",
 		test: /\b(convention|style|always|never|standard|pattern|the way we)\b/i,
 		advice: "A convention may be forming: it qualifies as a memory only if something backs it — lint config, a doc, team agreement, or consistent existing use.",
+	},
+	{
+		id: "test",
+		test: /\b(write|add|update) (the )?(unit |integration |e2e )?tests?\b|\btest coverage\b|\bwrite a test\b/i,
+		advice: "Before writing tests: search the store by DOMAIN rather than by the error string — what is worth asserting here is exactly the kind of thing a previous session recorded.",
+	},
+	{
+		id: "refactor",
+		test: /\b(refactor|restructure|redesign|rewrite (this|the)|extract (a|the) (module|package|service|component|interface)|split (this|the) (module|package|file|service))\b/i,
+		advice: "Refactoring: search first. A previous attempt, and the reason it was shaped this way, is the class of thing the store holds.",
+	},
+	{
+		id: "ci",
+		test: /\b(ci|pipeline|workflow|github actions|build (fails|failing|matrix)|release process|deploy(ment)?)\b/i,
+		advice: "CI and release work: search the store — platform-specific traps and matrix quirks are the most expensive thing to rediscover.",
+	},
+	{
+		id: "integrate",
+		test: /\b(integrat\w+|new (dependency|library|service|provider)|wire up|hook (it )?up|add support for)\b/i,
+		advice: "Adding an integration: search by the domain, not the library name — what bit last time may be recorded under the problem rather than the tool.",
 	},
 	{
 		id: "retro",

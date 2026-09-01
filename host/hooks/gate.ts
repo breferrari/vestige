@@ -27,6 +27,13 @@ const MAX_PER_TURN = 3;
 // A delegation whose PostToolUse never arrives (aborted, crashed) must not pin
 // the barrier open forever; past this the next prompt starts a fresh turn.
 const DELEGATION_TTL_MS = 10 * 60 * 1000;
+// The child brief. Deliberately a shape check and not a quality check: whether
+// the bullets are GOOD is a judgement this hook has no way to make, and a gate
+// that guesses at quality is a gate that argues with correct work.
+// Matched anywhere, not anchored to a line start: the description and the
+// prompt are concatenated with a space before this runs, so a line-anchored
+// pattern would silently depend on WHICH field carried the block.
+const BRIEFED = /\bKB context\s*:/i;
 const DISCOVERY = /\b(find|search|investigate|explore|discover|look (in|into|at)|figure out|understand|research|locate|where is|how does)\b/i;
 
 try {
@@ -89,14 +96,22 @@ try {
 	if (!/^(Task|Agent)$/i.test(tool)) { audit("skip-not-delegation"); process.exit(0); }
 	// Count the delegation before deciding, so every outcome marks it in flight.
 	st.depth++; st.depthTs = Date.now(); save();
-	if (st.searched) { audit("allow-already-searched"); process.exit(0); }
+
 	if (st.nudges >= MAX_PER_TURN) { audit("allow-budget-spent"); process.exit(0); }
 
 	const desc = `${payload.tool_input?.description ?? ""} ${payload.tool_input?.prompt ?? ""}`;
 	if (!DISCOVERY.test(desc)) { audit("allow-not-discovery"); process.exit(0); }
 
-	st.nudges++; save(); audit("NUDGE");
-	const reason = "About to delegate discovery without consulting the memory store. Call `search` or `recall` first — the sub-agent starts without what the store already holds.";
+	// Searching is necessary and not sufficient. A parent that searched and then
+	// spawned in the same message has handed the child NOTHING — the child starts
+	// empty and rediscovers what the parent just read. What releases the barrier
+	// is evidence in the spawn prompt that the child was briefed.
+	if (BRIEFED.test(desc)) { audit("allow-briefed"); process.exit(0); }
+
+	st.nudges++; save(); audit(st.searched ? "NUDGE-unbriefed" : "NUDGE-unsearched");
+	const reason = st.searched
+		? "This spawn carries no `KB context:` block. You searched, but the sub-agent starts empty — pass what you found as `KB context:` bullets, or the line `KB context: none relevant.` if the store had nothing."
+		: "About to delegate discovery without consulting the memory store. Call `search` or `recall` first, then open the spawn prompt with a `KB context:` block — the sub-agent starts without what the store already holds.";
 
 	if (mode === "enforce") {
 		process.stdout.write(JSON.stringify({
