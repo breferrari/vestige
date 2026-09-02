@@ -154,7 +154,7 @@ Identical to three decimals, on every register and both metrics, which is what s
 | identifier | 0.525 / 0.907 | **0.164 / 0.519** |
 | short | 0.366 / 0.923 | **0.082 / 0.404** |
 
-Roughly a third of the recall and a fifth of the first-slot accuracy, lost to a pool with no notion of who is asking; 130–147 of 183 top slots go to another project's memory. That is the cost the reach model removes, and it is the only part of this comparison that survives contact with a correct replication.
+Roughly a third of the recall and a fifth of the first-slot accuracy; 130–147 of 183 top slots go to another project's memory. **Read this as index cardinality, not as declared reach** — 23 candidate documents against 183, in a world whose services deliberately share one vocabulary so that no ranker can separate them lexically. It is the regime the reach model is built for, and it is not a test of reach itself; see the limits section below. That is the cost the reach model removes, and it is the only part of this comparison that survives contact with a correct replication.
 
 **What that leaves as an honest claim.** Per-project indexes buy isolation by *not sharing* — a memory lives in one project's index and reaches nothing else. The reach model gets the same isolation while letting a memory declare that it reaches several projects, or all of them, and be narrowed at write time if it over-claims. That is an architectural difference rather than a retrieval one, and the number that supports it is the shared-pool row above, not a ranking score.
 
@@ -285,6 +285,22 @@ A counterfactual, because overlap statistics can only fail to find leakage and n
 **What that licenses and what it does not.** The cross-project result (zero leaks against 130–147) does not depend on the narrative at all. The rank-1 and found@5 figures for the symptom register do, at least in part, and should be read as an upper bound for a workload whose queries and documents descend from one canonical phrasing.
 
 ---
+## What this document does not establish
+
+An outside review, given the full method and all three repositories, produced four objections that hold. They are here rather than in a footnote because each one bounds a claim above.
+
+**The reach model is not what was tested.** Every one of the 183 memories in this corpus is `scope: project`, and **none declares more than one**. So the scoped-versus-shared contrast compares a folder of 23 files against a folder of 183 — it measures **index cardinality**, not declared reach. The thing this system is actually for — a memory that names several projects and appears in each of their views — has no memory in the fixture and no cell in the scorer. A missed-transfer error, where a memory whose reach includes the caller fails to appear, cannot currently be counted at all.
+
+**"Zero cross-project hits" is the view definition, not a result.** The filter runs before the engine, so the engine is never offered another project's memory. That number states that the code does what it says; it is not evidence of retrieval quality and should not be read beside one.
+
+**The competing system's arms ran through this project's query function.** `bench-mcs-current.mjs` replicates its models, its `global_context`, its call shape and its limit — and then issues the query through `core/lib/qmd-session.ts`. That is a fair test of *its configuration* and not of *its product*, and the honest caption for those rows is "qmd layout experiment", not "their system".
+
+**No arm ranking from the 144-arm sweep is claimed.** Context, intent and reranking came back at exactly 0.000 marginal effect, which says those arms did not change the ordered list rather than saying something about retrieval. The one change that survived a paired test on 549 queries is the embedder, on recall only.
+
+**And the fixture's own limit, stated once more:** the corpus and the queries are rendered by one model from one world. Deleting each memory's opening sentence does **not** significantly change the score (p = 0.78), which refutes the specific charge that the symptom register matches a shared first line — but it does not address the broader entanglement, and no overlap statistic can. Escaping that needs a second model writing the queries, or real memories from real teams. Neither is done here.
+
+---
+
 ## Containment
 
 A pool that leaves the machine needs to be inspected, and neither parent system inspects content. Against a corpus with 80 planted secrets — credentials, tokens, keys, private hosts, home paths, and base64-wrapped variants:
