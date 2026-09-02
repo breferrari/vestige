@@ -316,7 +316,11 @@ Every decision the gate makes is appended to a bounded audit log, because the fa
 |---|---|
 | A per-project index cannot reach a memory another repo wrote, at any *k* | Reach is declared per memory, and reach decides storage |
 | Declared reach retrieves a shared lesson into the top five 77% of the time against a shared pool's 60% | Filter to the caller's view first, rank inside it |
+| Carrying other projects' lessons takes in-project recall from 0.98 to 0.71 | The trade is stated rather than hidden; a store that shares less pays less |
+| One other project in the index already costs 7.6 points of recall, seven cost half | The penalty starts at the second project, so scoping is not an at-scale concern |
+| Over-claims that cannot be narrowed cost 13 points of recall and 18 of transfer | Reach is narrowed at write time, and a memory reaching nobody is refused |
 | Services sharing one stack are lexically inseparable (1.07×) | Scoping cannot be left to the ranker |
+| The default embedder loses 36 recall queries against 5, p < 0.001 | The engine's default is not automatically the right one |
 | A stale memory outranks its own correction in 7–17 of 27 cases | Supersession is recorded, and remains unsolved in ranking |
 | Off-topic and on-topic results are indistinguishable to the caller | Stated as a limit; unresolved |
 | A gate after staging leaves a dirty history | The content gate runs before the sync path touches the tree |
