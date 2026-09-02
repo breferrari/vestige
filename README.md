@@ -83,15 +83,15 @@ Vestige is not a from-scratch design and does not pretend to be. It takes a **di
 
 Honest about what is and is not established:
 
-- **Measured**, on a corpus built to match a real store — 183 memories with a median of 502 words, gated against a working vault's own profile before any score is taken:
-  - the right memory reaches the caller's top five **84–93% of the time** and is first **33–53%**, depending entirely on how the question is phrased; the three query registers are reported separately because averaging them describes none of them
-  - **zero** hits from another project and zero junk, in every register and every arm
-  - identical results across three runs — sd 0.000 — where query expansion swings seven points between runs
-  - 80 of 80 planted secrets quarantined, zero contaminated blobs reaching git history, zero clean memories held back
-  - the behavioural layer verified inside live sessions rather than only in tests
+- **Measured** on a corpus built to match a real store — 183 memories, median 502 words, gated against a working vault's own profile before any score is taken:
+  - **What reach buys.** 57 queries asked by a service that did *not* write the memory it needs, about a fault in a shared library: declared reach retrieves it into the top five **77%** of the time; one shared pool **60%**; one index per project **0%**, because the document is not in that index at any *k*.
+  - **Within a project**, the right memory reaches the top five 84–93% of the time and is first 33–53%, depending entirely on how the question is phrased. The three query registers are reported separately because averaging them describes none of them.
+  - **Zero** hits from another project and zero junk, in every register and arm — which follows from the filter running before the engine.
+  - 80 of 80 planted secrets quarantined, zero contaminated blobs reaching git history, zero clean memories held back.
+  - The behavioural layer verified inside live sessions rather than only in tests.
 
-  Earlier versions of this file claimed rank-1 1.000 at 14 ms. That was measured on a fixture too thin to tell its own documents apart, and it is withdrawn. The full evidence and the retraction are in **[RECORD.md](./RECORD.md)**; the harness is public at [memory-stack-lab](https://github.com/breferrari/memory-stack-lab).
-- **Established, and bad**: it cannot decline. Asked something the store has no memory of, it returns five confident memories that are indistinguishable — on every axis a caller can observe — from a real answer. That is structural, measured, and unfixed.
+  Full method, every number, and what the measurements do **not** establish: **[RECORD.md](./RECORD.md)**. The harness is public at [memory-stack-lab](https://github.com/breferrari/memory-stack-lab).
+- **Established, and bad**: it cannot decline. Asked something the store has no memory of, it returns five confident memories that are indistinguishable — on every axis a caller can observe — from a real answer. Structural, measured, unfixed. Every ranking figure above is therefore conditional on the question having an answer.
 - **Not established**: it has not been used in anger on real work over time. There is no episodic tier — tested, and deliberately not built. Consolidation proposes but never writes, by design. Defects in this codebase have been found by benchmarking and by cross-platform CI rather than by anything failing in use; assume there are more.
 - **Measured at scale**: 180 projects and 3,600 memories, with **20 visible to one caller** — unchanged from 40 projects — and write cost flat at 3.9 ms per memory.
 

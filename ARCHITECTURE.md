@@ -188,6 +188,8 @@ flowchart TD
 
 **The index is per caller and named.** Isolation is a property of the index *name*, not of a directory — running `qmd init` in a per-caller directory silently creates nothing and every collection lands in the shared default index, which would put every project's memories in one place underneath a filter whose entire job is to keep them apart. Index builds are serialised with a cross-process lock, because two sessions building at once contend on one shared cache and the loser would otherwise degrade to unranked results without saying so.
 
+**Reach is what a per-project index cannot do.** Isolation by folder — one index per repository — gives the same in-project retrieval as a reach filter, measured identical to three decimals. What it cannot do is carry a lesson across: a memory written in one repository about a fault in a shared library is absent from every other repository's index, at any *k*. Measured over 57 such queries, each asked by a service that did not write the memory: declared reach retrieves it into the top five **77%** of the time, a shared pool **60%**, and a per-project index **0%**. Reach also decides storage — a memory reaching several projects cannot live inside one of them — so the declaration that makes it visible is the same one that puts it somewhere all of them can read.
+
 **Both layers matter.** The filter decides what may be seen; the ranker decides which of it answers the question. Re-measured on a corpus matching a real store, symptom register:
 
 | | rank-1 | found@5 | candidate set |
