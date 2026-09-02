@@ -42,6 +42,8 @@ Two things follow that matter more than the scores:
 
 Three registers, three retrieval arms, 183 queries each, one correct memory per query.
 
+The expansion rows are single runs and are **not** the figure to quote — that arm varies between runs and its mean and spread are given below. The other two arms are deterministic.
+
 | register | arm | rank-1 | found@5 | MRR |
 |---|---|---|---|---|
 | symptom | typed sub-queries | **0.454** | 0.929 | 0.650 |
@@ -51,7 +53,7 @@ Three registers, three retrieval arms, 183 queries each, one correct memory per 
 | identifier | + query expansion | 0.497 | 0.880 | 0.643 |
 | identifier | + cross-encoder rerank | 0.530 | **0.918** | 0.689 |
 | short | typed sub-queries | 0.328 | 0.836 | 0.521 |
-| short | + query expansion | **0.355** | 0.858 | 0.543 |
+| short | + query expansion | 0.355 | 0.858 | 0.543 |
 | short | + cross-encoder rerank | 0.328 | **0.902** | 0.556 |
 
 **The spread across registers is the result.** rank-1 runs from 0.328 to 0.530 depending only on how the question is phrased. An average over the three would be 0.44 — a number describing none of them, and the reason they are never averaged here.
