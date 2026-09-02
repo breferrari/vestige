@@ -240,7 +240,9 @@ The other arms, for completeness: query expansion 300–330 ms in-project, cross
 
 ## What it cannot do
 
-**It cannot decline.** 64 questions no engineering store could answer — cooking, music, eighteenth-century history, a gibberish token — issued *with* a project identity, which is the harder case:
+**It cannot decline.** 64 questions no engineering store could answer — cooking, music, eighteenth-century history, a gibberish token — issued *with* a project identity, which is the harder case.
+
+*Configuration A.*
 
 | | returned something | mean hits | any caveat |
 |---|---|---|---|
