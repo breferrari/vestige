@@ -32,39 +32,39 @@ One correct memory per query. `found@5` is recall of it; `rank-1` is how often i
 **Where the content is checked rather than assumed:** all 183 memories name their own service; same-topic vocabulary overlap runs 1.30× against different-topic; and a nearest-neighbour classifier with no metadata recovers the true topic 79% of the time against 8% chance.
 
 ---
-## The advantage, in one table
+## Against MCS: the same retrieval, and a choice it has to make
 
-Same corpus, same embedder, same query shape, same scorer. Two axes: finding a memory your own project wrote, and finding one another project wrote that declares it applies to you.
+Replicated from `bruno/qmd-retrieval-backend` at **3a75dd9** — its models, its `global_context`, its call shape, its limit — on the same corpus, queries, scorer and pinned qmd.
 
-| | in-project (found@5) | cross-project transfer (found@5) |
+**Two kinds of question matter, and they give opposite answers.** A project asking about a memory it wrote itself, and a project asking about a memory another repository wrote that declares it applies to them.
+
+| | a memory this project wrote | a memory another project wrote, declared to reach it |
 |---|---|---|
-| MCS + qmd, one index per project | **0.984** | **0.000** |
-| MCS + qmd, one shared pool | 0.475 | 0.597 |
+| MCS + qmd, **one index per project** | **0.984** | **0.000** |
+| MCS + qmd, **one shared pool** | 0.475 | 0.597 |
 | **Vestige** | **0.984** | **0.772** |
 
-**The prior art's two configurations are opposite ends of a trade-off.** One index per project retrieves as well as anything measured here — identical to this system to three decimals — and cannot carry a lesson across a repository boundary at all, because the document is in its author's index and nowhere else. One shared pool makes transfer possible and costs half of in-project recall, because every other project's memories now compete for the same five slots.
+*found@5, symptom register, same embedder throughout. Full per-register figures below.*
 
-**Declared reach does not make that trade**, and the reason is that one declaration does two jobs: it decides who may see a memory, and it decides where the memory is stored. A lesson reaching eight repositories cannot live inside one of them, so it is written to the shared store — and the caller reads a view containing exactly what reaches them, which is 23 documents rather than 183.
+**Read the columns, not the rows.** On the left, per-project indexing and declared reach are **identical — to three decimals, on all three registers**, because they are the same engine with the same embedder over the same 23 documents. **There is no retrieval-quality advantage here and this document once claimed one.**
 
-**What is not an advantage, stated plainly: retrieval quality.** With the same engine, embedder and query shape there is no difference, and an earlier version of this document claimed one.
+On the right, per-project indexing scores **zero, and not because it ranks badly**: the memory is in its author's index and the caller's index has never heard of it, at any *k*, under any ranker. A shared pool can reach it — and pays for that on the left, where in-project recall halves as 182 other projects' memories start competing for five slots.
 
----
+**So the prior art's two configurations are opposite ends of a trade-off, and the advantage is not making it.** One declaration decides both who may see a memory and where it is stored: a lesson reaching eight repositories cannot live inside one of them, so it is written where all eight read, while each caller still searches a view of 23 documents rather than 183.
 
-## What reach buys, which is the claim
+**Per-register detail, in-project queries:**
 
-57 queries, each asked by a service that did not write the memory it needs, about a fault in a library every service imports. The memory declares it applies to them.
+| register | per-project index / Vestige (identical) | one shared pool |
+|---|---|---|
+| symptom | 0.508 / 0.984 | 0.148 / 0.475 |
+| identifier | 0.525 / 0.907 | 0.164 / 0.519 |
+| short | 0.366 / 0.923 | 0.082 / 0.404 |
 
-| | rank-1 | found@5 | the document is reachable at all |
-|---|---|---|---|
-| **declared reach** | **0.263** | **0.772** | 1.00 |
-| one index per project | 0 | 0 | **0.00** |
-| one shared pool | 0.158 | 0.597 | 1.00 |
+The shared-pool column is **index cardinality under a shared vocabulary** — 23 candidate documents against 183, in a world whose services cannot be told apart lexically. It is the regime reach is built for; the reach claim itself is the right-hand column above.
 
-**The zero in the middle row is not a ranking failure.** A per-project index holds what that project wrote; the caller's index has never heard of the document, at any *k*, under any ranker. The last column is reported so that absence is not read as a bad score.
+**Two things stated so they are not mistaken for credit.** The typed `lex`+`vec` call shape both systems use **came from this project** — its author was pointed at this approach and adopted it, so the agreement is adoption and carries no weight either way. And on the embedder the prior art was right where this project was not: its hook uses `Qwen3-Embedding-0.6B` while this project took qmd's default.
 
-Against a shared pool, which *can* see it, declared reach retrieves it into the top five **77% of the time against 60%** — the same documents, the same engine, the same query, differing only in whether 182 other projects' memories are competing.
-
-Reach also decides storage. A memory reaching several projects cannot live inside one of them, and the write path routes it to the shared store without being asked. The write contract refused an earlier, malformed version of this declaration outright — `platform` names a runtime, not a set of repositories — which is the epistemic contract doing its job before any benchmark ran.
+**And the honest reading of 0.772**: it is the best of the three and it is not high. Nearly a quarter of cross-project lessons still miss the top five when they are visible and declared. That is an open number.
 
 ---
 
@@ -128,45 +128,23 @@ A 144-arm sweep across embedder, context, sub-query shape, intent and reranking 
 
 ---
 
-## Against MCS
+## Latency, including where this system is slower
 
-Replicated from `bruno/qmd-retrieval-backend` at **3a75dd9** — its models, its `global_context`, its call shape, its limit — on the same corpus, queries, scorer and pinned qmd.
+Every arm measured the same way, on the same machine, split by whether the query stayed in one project — because a per-caller index is restarted when the caller changes, and that restart loads a model.
 
-**Configured as it configures itself, retrieval is identical:**
-
-| register | MCS + qmd, per project | Vestige, same embedder |
+| | same project | after a project switch |
 |---|---|---|
-| symptom | 0.508 / 0.984 | 0.508 / 0.984 |
-| identifier | 0.525 / 0.907 | 0.525 / 0.907 |
-| short | 0.366 / 0.923 | 0.366 / 0.923 |
+| **Vestige** | 26 ms | 1,559 ms |
+| MCS + qmd, one index per project | **12 ms** | 1,368 ms |
+| MCS + qmd, one shared pool | **12 ms** | **11 ms** |
 
-Identical to three decimals on every register and both metrics — same engine, same embedder, same query shape, isolation either way. **There is no retrieval-quality difference between these systems.**
+**This system is the slowest of the three, and the shape of the cost follows from its design.** A per-caller view means one index per caller, so moving between projects restarts the search session and pays a model load. A single shared pool never switches, which is why its right-hand column is flat — the configuration that loses half its recall pays no latency for scoping because it does not scope.
 
-Two things stated so they are not mistaken for credit. The typed `lex`+`vec` call shape both systems use **came from this project** — its author was pointed at this approach and adopted it, so the agreement is adoption and carries no independent weight. And on the embedder the prior art was simply right: its hook has used `Qwen3-Embedding-0.6B` while this project took qmd's default, which is the measured difference above.
+Within one project — an agent working in one repository, which is the common case — the difference is 26 ms against 12 ms. Both are far below the point where a search is a search the agent learns to skip, which was the original reason to measure this at all.
 
-The difference that remains is the transfer table at the top of this document, and the shared-pool row below it — not a ranking score.
+**An earlier version of this document reported 14 ms here against 1,529 ms for the prior art.** That comparison spawned their CLI once per query while running this system's resident session, so it measured process startup rather than either design. It is withdrawn; the table above replaces it, and it does not favour this system.
 
-| register | per-project index | one shared pool |
-|---|---|---|
-| symptom | 0.508 / 0.984 | 0.148 / 0.475 |
-| identifier | 0.525 / 0.907 | 0.164 / 0.519 |
-| short | 0.366 / 0.923 | 0.082 / 0.404 |
-
-Read as **index cardinality under a shared vocabulary** — 23 candidate documents against 183, in a world whose services cannot be told apart lexically. It is the regime the reach model is built for; the reach claim itself is the transfer table.
-
----
-
-## Latency
-
-The search session holds one index, keyed per caller, so a query for a different project restarts it and pays a model load.
-
-| arm | same project | after a project switch |
-|---|---|---|
-| typed sub-queries | **22–26 ms** | 1,559–1,635 ms |
-| + query expansion | 300–330 ms | 2,733–2,786 ms |
-| + cross-encoder rerank | 729–756 ms | 3,165–3,252 ms |
-
-Reported split because a single mean over an interleaved workload was 1,421 ms — a figure nobody experiences.
+The other arms, for completeness: query expansion 300–330 ms in-project, cross-encoder reranking 729–756 ms. A single mean over an interleaved workload was 1,421 ms — a figure nobody experiences, which is why every row here is split.
 
 ---
 
