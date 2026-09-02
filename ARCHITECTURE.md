@@ -190,11 +190,19 @@ flowchart TD
 
 **Both layers matter.** The filter decides what may be seen; the ranker decides which of it answers the question. With the filter and no semantic ranking, rank-1 accuracy is 0.09 against 0.98. Neither substitutes for the other.
 
-**The query is stated, not expanded.** qmd's plain-text `query` is auto-expanded by the SDK into lex/vec/**hyde** variants, and HyDE writes a hypothetical answer with a model — an LLM call on every search, whose output then feeds the ranking. Vestige passes typed sub-queries instead: lexical first (it carries 2× weight, and a memory is found by the words of the problem more often than by a paraphrase), then vector. Measured over three runs each: rank-1 1.000 with zero variance at 14 ms a query, against 0.979 with sd 0.018 at 543 ms. `VESTIGE_QUERY_SHAPE=expand` restores expansion for a workload whose queries are worded unlike its documents — the case HyDE exists for, and the one this fixture does not stress.
+**The query is stated, not expanded.** qmd's plain-text `query` is auto-expanded by the SDK into lex/vec/**hyde** variants, and HyDE writes a hypothetical answer with a model — an LLM call on every search, whose output then feeds the ranking. Vestige passes typed sub-queries instead: lexical first (it carries 2× weight, and a memory is found by the words of the problem more often than by a paraphrase), then vector.
+
+Measured over three runs each on the symptom register: typed gives rank-1 **0.454 with sd 0.000** — the identical result three times — against expansion's mean **0.384 with sd 0.030**, a seven-point swing between runs, because a hypothetical document is generated text that lands in the ranking. Expansion also loses on accuracy in two registers of three and is indistinguishable from noise in the third. Warm queries within one project: 26 ms against 330 ms.
+
+`VESTIGE_QUERY_SHAPE=expand` restores expansion for a workload whose queries are worded unlike its documents — the case HyDE exists for. This corpus's queries are written from the incident record rather than from the memories, so it stresses that case more than the previous fixture did, and expansion still loses.
 
 **The engine is resident, not re-launched per query.** Invoking the search CLI per call paid its model-loading cost every time — 2,748ms per search, almost none of it search. qmd speaks MCP over stdio, so one child is started per session and reused, keyed on the view's signature so a changed visible set re-resolves rather than answering from a stale collection. The child is unreferenced from the event loop and torn down on exit, because a resident child otherwise keeps a CLI or a test runner from ever exiting.
 
-**Reranking is off, and that is a measurement rather than a default.** On this corpus it returns **byte-identical hit lists on all 64 queries** — the same documents in the same order — for **2.7× the latency** (≈4,165 ms per query against ≈1,574 ms). Scores follow from that: found@5 1.000, rank-1 0.969, MRR 0.984 on both arms over three runs. Nothing to gain, most of the query budget to lose.
+**Reranking is off, and that is a measurement rather than a default — though a more interesting one than it first appeared.** On a corpus of realistic length it is *not* inert: compared list by list it changes the top-5 **set** for roughly half of 183 queries. What it does not change is the answer. rank-1 is identical to the digit in all three query registers (0.454, 0.530, 0.328) and the entire miss breakdown is unchanged, while found@5 rises 0.929 → 0.956, 0.880 → 0.918 and 0.836 → 0.902, at **28–34× the warm-query latency** (729–756 ms against 22–26 ms).
+
+So the default is conditional on what the caller reads: a consumer of the top hit pays 30× for an answer that cannot change; one that reads five gains 2.7 to 6.6 points of recall. It stays off, and `VESTIGE_RERANK=1` turns it on for the second case.
+
+> An earlier version of this paragraph reported **byte-identical hit lists on every query**. That was true of the fixture it was measured on — documents averaging 75 words leave nothing to reorder — and it is not true here. The conclusion survived the corpus change; the mechanism behind it did not.
 
 > An earlier version of this paragraph claimed the reranker actively *hurt* accuracy: 0.906 against 1.000, with four of sixty-four queries falling back to unranked results. **That does not reproduce.** It came from a harness that timed the two arms without scoring them, where those four fallbacks were a defect in the run rather than an effect of reranking. The narrower claim is the one the evidence supports, and it is still enough to justify the default — a stage that cannot change the answer has no accuracy case to make.
 
@@ -208,13 +216,13 @@ Retrieval is not one model. [qmd](https://github.com/tobi/qmd) holds three model
 
 | slot | model, as qmd configures it | used | why |
 |---|---|---|---|
-| embed | `embeddinggemma-300M` (Q8_0, ~300M params) | **yes** | one vector per query, one per chunk at index time. The lexical half of the query costs no model at all — BM25 over an index — so a warm query is 14 ms |
+| embed | `embeddinggemma-300M` (Q8_0, ~300M params) | **yes** | one vector per query, one per chunk at index time. The lexical half of the query costs no model at all — BM25 over an index — so a warm query inside one project is 22–26 ms |
 | generate | `qmd-query-expansion-1.7B` (Q4_K_M) | no | the auto-expansion, HyDE included. ~500 ms per query, and a *hypothetical document* is generated text, so it lands in the ranking and moves between runs |
-| rerank | `Qwen3-Reranker-0.6B` (Q8_0) | no | byte-identical hit lists on all 64 queries, for 2.7× the latency |
+| rerank | `Qwen3-Reranker-0.6B` (Q8_0) | no | reorders half the shortlists and changes the first slot in almost none, for 28–34× the latency |
 
 Written out, the arithmetic stops being surprising: a 1.7B generative model and a 600M cross-encoder were running on every search, and a 300M embedder was doing the part that produced the answer.
 
-Both refusals are measurements rather than preferences. Skipping expansion took rank-1 from 0.979 (sd 0.018) to 1.000 (sd 0.000) and a warm query from 543 ms to 14 ms — roughly 97% of what used to be called "search latency" was a model writing a paragraph nobody read.
+Both refusals are measurements rather than preferences. Skipping expansion takes rank-1 from 0.384 (sd 0.030) to 0.454 (sd 0.000) and a warm query from 330 ms to 26 ms — roughly 92% of what used to be called "search latency" was a model writing a paragraph nobody read.
 
 Everything runs locally through qmd: **nothing leaves the machine at query time and there is no API key anywhere in this system.** That matters more for a memory store than it would elsewhere — the corpus is the most sensitive thing a team owns, and a hosted embedder on every search would undo the content gate.
 
