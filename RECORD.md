@@ -75,6 +75,25 @@ The mechanism behind the loss is visible in the misses: on `symptom` expansion t
 
 ---
 
+## The embedder was the wrong default, and that is most of the headline
+
+qmd exposes three model slots. Two are optional and both were measured — expansion loses, and the cross-encoder changes the shortlist but not the answer. The third runs on every query and every chunk, is the only one always on, and had never been varied: it was simply qmd's default.
+
+qmd ships a second embedder. Swapping only that slot, same corpus, same views, same query path, 183 queries per register:
+
+| register | embeddinggemma-300M (the default) | **Qwen3-Embedding-0.6B** | Δ found@5 |
+|---|---|---|---|
+| symptom | 0.454 / 0.929 | **0.508 / 0.984** | +0.055 |
+| identifier | 0.530 / 0.880 | **0.525 / 0.907** | +0.027 |
+| short | 0.328 / 0.836 | **0.366 / 0.923** | +0.087 |
+
+**Recall improves in every register, and it is slightly faster** — 67 ms against 74 ms per warm query. There is no trade being made.
+
+**A prediction recorded before the run, and falsified by it.** I expected no material gain: found@5 was already 0.93, so the answer nearly always reached the shortlist, and a cross-encoder reranker — strictly stronger at ordering than any bi-encoder — moves rank-1 by exactly zero across all three registers. That seemed to place the remainder in near-duplicate siblings and a labelling ceiling. It was wrong, and the flaw is worth keeping: **recall itself moved**, so the weaker embedder had been failing to retrieve some answers at all, and **a reranker cannot promote what retrieval never returned.**
+
+Every table above this section reports the shipped default. The comparison below reports both systems on the better embedder, because that is the one the prior art uses and a comparison must not hold one side to a worse configuration than it runs.
+
+---
 ## What took the top slot when the right memory did not
 
 Four causes, because they have four different fixes.
@@ -106,53 +125,39 @@ Four causes, because they have four different fixes.
 Reported as three numbers rather than one because they answer different questions. The third column is the outcome that actually harms an agent: a stale write-up ranked above the correction that exists in the same store. It is not rare, and it is not fixed.
 
 ---
-## Against MCS, three configurations, one corpus
+## Against MCS, on its own configuration
 
-The prior art is [`mcs-cli/memory`](https://github.com/mcs-cli/memory), which recently gained a qmd retrieval backend on the `bruno/qmd-retrieval-backend` branch. All three of its configurations were re-run on **this corpus, these queries, and this scorer** — the earlier comparison in this document was taken on the retired fixture and is withdrawn.
+The prior art is [`mcs-cli/memory`](https://github.com/mcs-cli/memory), which gained a qmd retrieval backend on the `bruno/qmd-retrieval-backend` branch. It is replicated here from that branch at **3a75dd9** — its models, its `global_context`, its call shape, its limit — on the same corpus, the same queries, the same scorer, and the same pinned qmd 2.8.3.
 
-Each configuration is replicated from its own `sync-memories.sh` rather than approximated: a named index under the project via `QMD_CONFIG_DIR`/`INDEX_PATH`, one embedding model in all three of qmd's slots, and the structured `intent`/`lex`/`vec` query shape with reranking off that its own instructions tell the agent to use. The shipped arm is docs-mcp-server over a flat pool, embedding through Ollama — rebuilt from nothing, since that environment no longer existed, and therefore running today's versions rather than the ones the original figure used.
+An earlier version of this document compared against a replication taken from a **previous** read of that hook, and it had drifted in two ways that both understated it: the wrong embedding model, and a call shape its own instructions do not recommend. Every number produced that way is withdrawn. A comparison against a configuration its author does not use is not a measurement of their design.
 
-**found@5, the measure of whether the answer reached the agent at all:**
+**Configured as it configures itself, retrieval is identical.**
 
-| | symptom | identifier | short |
-|---|---|---|---|
-| **Vestige** | **0.929** | **0.880** | **0.836** |
-| MCS + qmd, one index per project | 0.459 | 0.432 | 0.399 |
-| MCS + qmd, one shared pool | 0.219 | 0.235 | 0.142 |
-| MCS as shipped, flat pool | 0.393 | 0.311 | 0.350 |
-
-**Where the misses go is the more useful table.** Documents retrieved from a project that did not ask:
-
-| | symptom | identifier | short |
-|---|---|---|---|
-| **Vestige** | **0** | **0** | **0** |
-| MCS + qmd, per project | 0 | 0 | 0 |
-| MCS + qmd, shared pool | 138 | 130 | 147 |
-| MCS as shipped | 121 | 134 | 138 |
-
-Both shared-pool configurations spend most of their top slots on another project's memories. That is not a tuning gap; it is what a pool with no notion of who is asking does once there is more than one project in it, and it is the failure the reach model exists to remove. **It is also the one result that got larger on a realistic corpus.**
-
----
-
-## The gap against their per-project arm is the query path, not the architecture
-
-The per-project configuration leaks nothing — zero cross-project hits, identical to this system. **So on that arm there is no scoping difference to credit, and the tempting reading is unavailable.** What differs is how the query reaches the engine, and both shapes already exist in this codebase: typed sub-queries through a resident server is the default here, and a single structured document through a fresh CLI process is this plugin's own fallback.
-
-One index, one corpus, one embedding model, reranking off in both, and the only variable is delivery:
-
-| | rank-1 | found@5 |
+| register | MCS + qmd, one index per project | Vestige, same embedder |
 |---|---|---|
-| typed sub-queries, resident session | **0.454** | **0.929** |
-| one structured document, CLI per query | 0.399 | 0.454 |
+| symptom | 0.508 / 0.984 | 0.508 / 0.984 |
+| identifier | 0.525 / 0.907 | 0.525 / 0.907 |
+| short | 0.366 / 0.923 | 0.366 / 0.923 |
 
-That second row reproduces the other stack's per-project result to three decimals — they measured 0.399 and 0.459. Replicated on the `identifier` register: 0.328 / **0.432** against their measured 0.339 / **0.432**, an exact match on found@5.
+Identical to three decimals, on every register and both metrics, which is what should happen — same engine, same embedder, same query shape, and isolation either way. **There is no retrieval-quality difference between these two systems, and this document previously claimed one.**
 
-**So their number is explained by the query shape their own instructions specify, on their own index, and by nothing architectural.** Stating it the other way round would have been the most flattering explanation available and also the first one a reader would check.
+**The difference appears when memories are shared.** One index per project is what the `memory` pack builds. The `shared-memories` pack produces one pool over everything, and that is the configuration a team actually runs:
 
-Put usefully rather than competitively: **passing explicit lex and vec sub-queries instead of one auto-expanded document roughly doubles found@5 on their index, with no other change.**
+| register | one index per project | one shared pool |
+|---|---|---|
+| symptom | 0.508 / 0.984 | **0.148 / 0.475** |
+| identifier | 0.525 / 0.907 | **0.164 / 0.519** |
+| short | 0.366 / 0.923 | **0.082 / 0.404** |
+
+Roughly a third of the recall and a fifth of the first-slot accuracy, lost to a pool with no notion of who is asking; 130–147 of 183 top slots go to another project's memory. That is the cost the reach model removes, and it is the only part of this comparison that survives contact with a correct replication.
+
+**What that leaves as an honest claim.** Per-project indexes buy isolation by *not sharing* — a memory lives in one project's index and reaches nothing else. The reach model gets the same isolation while letting a memory declare that it reaches several projects, or all of them, and be narrowed at write time if it over-claims. That is an architectural difference rather than a retrieval one, and the number that supports it is the shared-pool row above, not a ranking score.
+
+**Stated because it would otherwise look like independent agreement:** the typed `lex` + `vec` call shape both systems use came from this project — its author was pointed at this approach and adopted it. Two systems agreeing because one told the other is one observation, not two, and it is not evidence for either design.
+
+**And on the embedder, the prior art was simply right.** Its hook has used `Qwen3-Embedding-0.6B` in all three slots for some time; this project took qmd's default, `embeddinggemma-300M`. Measured here, that choice is worth **+5.4 points of rank-1 and +5.5 of found@5 on the symptom register, at no latency cost** — so as this document was first written, the prior art's configuration beat this project's shipped default, for that reason alone.
 
 ---
-
 ## Latency is two numbers, and the mean is neither
 
 The search session holds **one index**, and the index is per caller, so a query for a different project shuts it down and starts it again — paying a model load. A fixture that interleaves projects pays that on nearly every query; an agent working in one repository almost never does.
