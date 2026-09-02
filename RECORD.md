@@ -80,7 +80,7 @@ Three questions matter. **Can a project find a memory it wrote itself?** **Can i
 | MCS, one shared pool | 183 | 0.475 | 0.597 | **130–147 of 183** |
 | **Vestige, declared reach** | 73 | 0.710 | **0.772** | **0** |
 
-**Vestige is the only one of the three that answers both questions.** A per-project index answers the first best of anything measured here and cannot answer the second — the dash is not a low score, it is an absent capability, and no ranker or larger *k* changes it. A shared pool answers the second, worse, and answers it by putting every other project's memories in front of the caller.
+**Vestige is the only one of the three that answers the second question without failing the third.** A per-project index answers the first best of anything measured here and cannot answer the second at all — the dash is not a low score, it is an absent capability, and no ranker or larger *k* changes it. A shared pool answers the second, worse, and answers it by putting every other project's memories in front of the caller.
 
 **The third column is the one that has no competitor.** In each register, the memory shown first belongs to another project in 130 to 147 of the 183 queries. Vestige spends none. This follows by construction — the reach filter runs before the engine, so an inapplicable memory is never a candidate — and construction is the point: it is a guarantee rather than a ranking that usually behaves. The measurement confirms the code does what it claims; the competing column is what not having the guarantee costs.
 
@@ -88,7 +88,7 @@ Three questions matter. **Can a project find a memory it wrote itself?** **Can i
 
 **Against one index per project, transfer is bought and paid for.** Declared reach takes in-project found@5 from 0.984 to 0.710, because carrying other projects' lessons *is* enlarging the caller's view. That is the trade, it is real, and the next two sections price it.
 
-**The size of that bill is a property of the store, not of the design.** 57 of these 183 memories declare they reach every service — 31%, because a third of the incidents are faults in a shared library. A store where less is genuinely shared pays less; one where more is shared pays more.
+**The size of that bill is a property of the store, not of the design.** 57 of these 183 memories declare they reach every service — 31%, because a third of the incidents are faults in a shared library. A store where less is genuinely shared pays less; one where more is shared pays more. The curve in the next section gives the exchange rate at each view size.
 
 **And the honest reading of 0.772**: it is the best transfer number of the three and it is not high. Nearly a quarter of cross-project lessons still miss the top five when they are visible and declared.
 
