@@ -15,8 +15,9 @@
  *     project axis, so it also covers platform and general reach.
  *   - `narrowScope` is the write-time downgrade rule that filter's reach
  *     DEPENDS ON: a `scope: general` memory must reach every caller, so any
- *     filter is obliged to admit it, and at a 24% over-claim rate the filter
- *     collapsed from 0.984 to 0.391 rank-1 accuracy.
+ *     filter is obliged to admit it, and at a 24% over-claim rate that cannot
+ *     be narrowed the caller's view grows from 73 documents to 100, costing 13
+ *     points of in-project recall and 18 of transfer.
  *
  * So Vestige is not a mashup. It is OM's facet model run as the filter over
  * an MCS-shaped shared pool, with the write path gated and the push made survivable under concurrency.

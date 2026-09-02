@@ -55,12 +55,12 @@ Numbers below are measured under one of four setups. They are not interchangeabl
 
 | | embedder | what the caller's view contains | documents searched |
 |---|---|---|---|
-| **A — shipped default** | embeddinggemma-300M | its own project's memories | 23 |
+| **A — qmd's default embedder** | embeddinggemma-300M | its own project's memories | 23 |
 | **B — better embedder** | Qwen3-Embedding-0.6B | its own project's memories | 23 |
 | **C — declared reach on** | Qwen3-Embedding-0.6B | its own, plus every memory declaring it reaches this project | 73 |
 | **D — one shared pool** | Qwen3-Embedding-0.6B | everything, from every project | 183 |
 
-**C is what Vestige does when reach is used**, and it is the configuration the transfer and trade-off tables report. **A is what ships today.** B exists because MCS uses that embedder and a comparison must not hold one side to a worse configuration. D is the competing shared-pool arm.
+**C is what Vestige does when reach is used**, and it is the configuration the transfer and trade-off tables report. **B is what ships**, since the embedder measurement below was acted on. A is the same thing on qmd's default embedder, which is what shipped until then and what most of the register tables below were measured on; it is kept because retiring those numbers to re-run them under B would trade a measured figure for an unmeasured one. D is the competing shared-pool arm.
 
 Each table below names its configuration.
 
@@ -194,7 +194,7 @@ The curve above prices retrieval against view size. This is the other half: how 
 
 ## Retrieval, by how the question was asked
 
-Three registers, 183 queries each, one correct memory per query. **Configuration A** — Vestige on the shipped default embedder, over a store where every memory is scoped to its own project.
+Three registers, 183 queries each, one correct memory per query. **Configuration A** — qmd's default embedder, which is what shipped when these were measured, over a store where every memory is scoped to its own project. The embedder section below gives what changes under B: found@5 rises and the first slot does not move.
 
 These are the highest in-project figures in this document, and that is a property of the configuration rather than a best case to quote: a 23-document view is the smallest field any arm here searches. Turning declared reach on (configuration C) puts 73 documents in front of the ranker and takes symptom found@5 from 0.929 to 0.710, which is the trade priced above.
 
@@ -248,11 +248,13 @@ Measured across **all 549 queries**, bootstrap intervals resampling **queries**,
 
 | | rank-1 | found@5 |
 |---|---|---|
-| embeddinggemma-300M (default) | 0.437 `[0.393, 0.481]` | 0.882 `[0.856, 0.900]` |
+| embeddinggemma-300M (qmd's default) | 0.437 `[0.393, 0.481]` | 0.882 `[0.856, 0.900]` |
 | **Qwen3-Embedding-0.6B** | 0.466 `[0.426, 0.501]` | **0.938** `[0.922, 0.955]` |
 | paired | 38 vs 54 queries, p = 0.117 | 5 vs **36**, **p < 0.001** |
 
 **Recall improves; the first slot does not.** The rank-1 difference rests on about five queries and is not claimed.
+
+**This change is now shipped.** The plugin names the embedder in each caller's qmd config rather than inheriting qmd's default, and forces a re-embed when it changes one — the two models produce different vector dimensions, qmd refuses to mix them, and a query against a mixed index throws rather than degrading. A model somebody set deliberately is never overwritten.
 
 A 144-arm sweep across embedder, context, sub-query shape, intent and reranking found **only two variables move anything**. Context and intent are exactly zero. Its leading arm — dropping the lexical sub-query — collapsed on a register it was not selected on (0.284 against 0.525, where queries paste exact identifiers) and loses 36 recall queries against 5 over the full set. **No arm ranking is claimed from it**; selecting the best of 144 on one slice is multiple testing, and the arm that survived held-out registers was third-placed.
 

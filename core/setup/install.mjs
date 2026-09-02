@@ -36,7 +36,7 @@ const q = ensureQmd({ update: !argv.has("--no-update") });
 say(q.ok ? `  qmd            ${q.detail}` : `  qmd            FAILED — ${q.detail}`);
 if (!q.ok) {
 	say("\n  Retrieval will be badly degraded without qmd: the reach filter still");
-	say("  protects what you can see, but rank-1 accuracy drops from 0.98 to 0.09.");
+	say("  protects what you can see, but the right memory is first 4% of the time instead of 45%.");
 }
 
 // 2 — the global store

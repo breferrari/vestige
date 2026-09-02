@@ -1,7 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -24,6 +24,7 @@ process.env.VESTIGE_HOME = HOME;
 process.env.VESTIGE_NO_UPDATE = "1";
 const { remember, search, hasQmd } = await import("./vestige.ts");
 const { indexName } = await import("./index-view.ts");
+const { qmdConfigPath, PREFERRED_EMBED_MODEL } = await import("./qmd-embed-model.ts");
 
 // qmd is a ~250MB install with model downloads, so CI does not have it. Without
 // it `search` falls back to facet order, and this test's non-vacuity guard
@@ -56,6 +57,21 @@ describe("index isolation", () => {
 
 		assert.equal(a.hits.some((h) => h.name.startsWith("beta-svc")), false, "alpha saw beta's memory");
 		assert.equal(b.hits.some((h) => h.name.startsWith("alpha-svc")), false, "beta saw alpha's memory");
+	});
+
+	test("the index is built on the chosen embedder, not qmd's default", { skip: ENGINE ? false : "qmd is not installed; there is no config to inspect" }, async () => {
+		// qmd writes ITS default into the config the first time it touches an
+		// index, and config beats the environment variable from then on. So this
+		// only holds if the model is set after the collection exists and before
+		// anything is embedded — a wiring order no unit test on the helper alone
+		// would catch. It is worth 36 recall queries against 5, p < 0.001.
+		const C = repo("embedder-svc");
+		remember({ title: "Embedder check", body: BODY("embedder-svc"), confidence: "inferred", scope: "project", projects: ["embedder-svc"] }, { cwd: C });
+		const r = await search("idempotency key for a retried mutation", { cwd: C });
+		assert.equal(r.engine, "qmd", `fell back to ${r.engine}; no index was built, so this proves nothing`);
+
+		const cfg = readFileSync(qmdConfigPath(indexName({ project: "embedder-svc", platforms: [] })), "utf-8");
+		assert.match(cfg, new RegExp(`embed:\\s*${PREFERRED_EMBED_MODEL.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`), "the index is still on qmd's default embedder");
 	});
 
 	test("callers get distinct index names, and an anonymous caller its own", () => {

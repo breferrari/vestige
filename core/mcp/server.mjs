@@ -163,7 +163,7 @@ async function callTool(name, args) {
       const c = cfg.stores.find((x) => x.name === s.config.name);
       return `  ${s.config.name.padEnd(10)} ${String(c?.kind).padEnd(9)} accepts ${JSON.stringify(c?.accepts)}\n             ${s.path}`;
     }).join("\n");
-    return text(`stores:\n${lines}\nvisible here:  ${n()}\nsemantic ranking: ${hasQmd() ? `qmd ready (${qmdState.detail})` : `UNAVAILABLE — ${qmdState.detail}. Retrieval is badly degraded: rank-1 drops from 0.98 to 0.09.`}`);
+    return text(`stores:\n${lines}\nvisible here:  ${n()}\nsemantic ranking: ${hasQmd() ? `qmd ready (${qmdState.detail})` : `UNAVAILABLE — ${qmdState.detail}. Retrieval is badly degraded: the right memory is first 4% of the time instead of 45%, and in the top five 22% instead of 93%.`}`);
   }
   return text(`unknown tool: ${name}`);
 }

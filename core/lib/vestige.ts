@@ -13,8 +13,8 @@
  * Measured on the same corpus, same queries, filtered views:
  *
  *              rank-1    found@5
- *   facets      0.094      0.438      specificity and recency, no query relevance
- *   qmd         0.984      1.000
+ *   facets      0.044      0.219      specificity and recency, no query relevance
+ *   qmd         0.454      0.929
  *
  * The filter decides WHAT may be seen; the ranker decides WHICH of it answers
  * the question. Both are load-bearing and neither substitutes for the other. A
@@ -230,7 +230,7 @@ export function hasQmd(): boolean {
  *
  * Falls back to facet order when qmd is absent, so a broken install still
  * answers rather than erroring — but this is DEGRADED, not equivalent. It costs
- * rank-1 accuracy 0.984 -> 0.094. Nothing outside the caller's reach can appear
+ * rank-1 accuracy 0.454 -> 0.044. Nothing outside the caller's reach can appear
  * either way, so the fallback is safe; it is simply much worse at answering.
  * Callers are told which engine ran precisely so this is never invisible.
  */
@@ -246,8 +246,8 @@ async function searchInner(query: string, opts: { cwd?: string; limit?: number }
 	if (!query) return { hits: base.slice(0, limit), engine: "facets" };
 
 	// Build or refresh the caller's index. `search` once took an `indexDir` that
-	// nothing supplied, so it ALWAYS fell back to facet order — rank-1 0.094
-	// against 0.984 — while the benchmarks built indexes in the harness and
+	// nothing supplied, so it ALWAYS fell back to facet order — rank-1 0.044
+	// against 0.454 — while the benchmarks built indexes in the harness and
 	// reported the good number.
 	const idx = ensureIndex({ cwd });
 	if (!idx.ok || !idx.dir || !idx.index) {

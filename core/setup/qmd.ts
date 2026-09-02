@@ -3,8 +3,8 @@
  * upgrade breaks it.
  *
  * qmd is a HARD dependency, not an optional accelerator: with the same reach
- * filter and the same views, facet-only ranking scores rank-1 0.094 against
- * qmd's 0.984. So it cannot be assumed present, and "install it yourself" is
+ * filter and the same views, facet-only ranking scores rank-1 0.044 against
+ * qmd's 0.454, and found@5 0.219 against 0.929. So it cannot be assumed present, and "install it yourself" is
  * install friction on the one thing that makes retrieval work.
  *
  * NOT installed into the host's own directory. It lives under VESTIGE_HOME so

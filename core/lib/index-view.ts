@@ -4,7 +4,7 @@
  * `search` took an `indexDir` and nothing ever supplied one, so every real call
  * fell through to facet ordering while the benchmarks, which built indexes in
  * the harness, reported qmd's numbers. Shipped like that, retrieval would have
- * been rank-1 0.094 in the field against 0.984 on the bench — the gap between
+ * been rank-1 0.044 in the field against 0.454 on the bench — the gap between
  * measuring a component and measuring the product.
  *
  * WHY A MATERIALISED VIEW rather than one index over everything.
@@ -14,7 +14,7 @@
  * every mode, so a post-filter needs the caller's memory to beat every other
  * project into a global top-20 — marginal at sixteen projects and hopeless as
  * the store grows. A per-caller view has no such bound. It is also exactly the
- * architecture measured at 0.984 rank-1.
+ * architecture every retrieval figure in RECORD.md is measured on.
  *
  * Views are HARDLINKED, not copied: the same bytes, one inode, so a view costs
  * a directory entry per memory rather than a duplicate of the store. Copying is
@@ -25,6 +25,7 @@ import { copyFileSync, existsSync, linkSync, mkdirSync, readFileSync, readdirSyn
 import { join } from "node:path";
 import { readPool, visibleTo, type PoolEntry } from "./memory.ts";
 import { activeStores, callerPlatforms, currentProject, vestigeHome } from "./stores.ts";
+import { setEmbedModel } from "./qmd-embed-model.ts";
 import { ensureQmd, runQmd } from "../setup/qmd.ts";
 import type { Caller } from "./om/memory-recall.ts";
 
@@ -169,7 +170,7 @@ export function ensureIndex(opts: { cwd?: string; caller?: Caller } = {}): Index
 		// Index builds CONTEND. qmd keeps its stores in one shared cache directory,
 		// so two Vestige processes building at the same time — two sessions, or two
 		// projects in one session — can collide on it. The loser used to fall back
-		// to facet ordering silently, which is rank-1 0.094 dressed as a working
+		// to facet ordering silently, which is rank-1 0.044 dressed as a working
 		// search. Bounded retry with jitter, the same shape the push path uses for
 		// the same reason.
 		// Rebuilt from scratch each time the signature moves: the view is a fresh
@@ -183,7 +184,7 @@ export function ensureIndex(opts: { cwd?: string; caller?: Caller } = {}): Index
 		// seconds in total — was sized for a lock held briefly. It is not: the
 		// holder is another caller's EMBED, which takes seconds on a real store.
 		// So the loser gave up and the caller silently degraded to unranked
-		// facet ordering, which is the difference between rank-1 0.98 and 0.09.
+		// facet ordering, which is the difference between rank-1 0.454 and 0.044.
 		// It surfaced as a test that failed roughly one run in ten and passed on
 		// the retry — the shape that gets waved through.
 		for (let attempt = 1; attempt <= EMBED_ATTEMPTS && !built; attempt++) {
@@ -191,7 +192,13 @@ export function ensureIndex(opts: { cwd?: string; caller?: Caller } = {}): Index
 			const add = runQmd(["--index", name, "collection", "add", view, "--name", "memories"], { cwd: idx });
 			if (!add.ok) { lastErr = `collection add: ${add.stderr.slice(0, 160)}`; }
 			else {
-				const emb = runQmd(["--index", name, "embed"], { cwd: idx });
+				// Name the embedder before embedding. qmd writes its own default into
+				// the config the first time it touches an index, so this has to run
+				// after the collection exists — and it changes the vector dimension,
+				// so anything already embedded under the old model has to go. qmd
+				// refuses to mix dimensions: `embed` errors and a query throws.
+				const swapped = setEmbedModel(name);
+				const emb = runQmd(["--index", name, "embed", ...(swapped ? ["-f"] : [])], { cwd: idx });
 				// EXIT 0 IS NOT SUCCESS. qmd's embed lock reports contention as
 				// success: it prints "Another embed process is already running.
 				// Skipping." and exits 0. Trusting that stamps the signature having

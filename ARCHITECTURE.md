@@ -229,7 +229,7 @@ Retrieval is not one model. [qmd](https://github.com/tobi/qmd) holds three model
 
 | slot | model, as qmd configures it | used | why |
 |---|---|---|---|
-| embed | `embeddinggemma-300M` (Q8_0, ~300M params) | **yes** | one vector per query, one per chunk at index time. The lexical half of the query costs no model at all — BM25 over an index — so a warm query inside one project is 22–26 ms |
+| embed | `Qwen3-Embedding-0.6B` (Q8_0) | **yes** | one vector per query, one per chunk at index time. The lexical half of the query costs no model at all — BM25 over an index — so a warm query inside one project is 22–26 ms |
 | generate | `qmd-query-expansion-1.7B` (Q4_K_M) | no | the auto-expansion, HyDE included. ~500 ms per query, and a *hypothetical document* is generated text, so it lands in the ranking and moves between runs |
 | rerank | `Qwen3-Reranker-0.6B` (Q8_0) | no | reorders half the shortlists and changes the first slot in almost none, for 28–34× the latency |
 
