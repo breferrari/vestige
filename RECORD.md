@@ -75,25 +75,30 @@ The mechanism behind the loss is visible in the misses: on `symptom` expansion t
 
 ---
 
-## The embedder was the wrong default, and that is most of the headline
+## The embedder was the wrong default — and only recall moved
 
-qmd exposes three model slots. Two are optional and both were measured — expansion loses, and the cross-encoder changes the shortlist but not the answer. The third runs on every query and every chunk, is the only one always on, and had never been varied: it was simply qmd's default.
+qmd exposes three model slots. Two are optional and both were measured: expansion loses, and the cross-encoder changes the shortlist but not the answer. The third runs on every query and every chunk, is the only one always on, and had never been varied — it was simply qmd's default. qmd ships a second embedder.
 
-qmd ships a second embedder. Swapping only that slot, same corpus, same views, same query path, 183 queries per register:
+Measured across **all 549 queries**, with bootstrap intervals resampling **queries** and McNemar's exact test on the paired outcomes:
 
-| register | embeddinggemma-300M (the default) | **Qwen3-Embedding-0.6B** | Δ found@5 |
-|---|---|---|---|
-| symptom | 0.454 / 0.929 | **0.508 / 0.984** | +0.055 |
-| identifier | 0.530 / 0.880 | **0.525 / 0.907** | +0.027 |
-| short | 0.328 / 0.836 | **0.366 / 0.923** | +0.087 |
+| | rank-1 | found@5 |
+|---|---|---|
+| embeddinggemma-300M (the default) | 0.437 `[0.393, 0.481]` | 0.882 `[0.856, 0.900]` |
+| **Qwen3-Embedding-0.6B** | 0.466 `[0.426, 0.501]` | **0.938** `[0.922, 0.955]` |
+| paired test | 38 vs 54 queries, **p = 0.117** | 5 vs **36** queries, **p < 0.001** |
 
-**Recall improves in every register, and it is slightly faster** — 67 ms against 74 ms per warm query. There is no trade being made.
+**Recall improves and the first slot does not.** The intervals for found@5 do not overlap and the disagreement is one-sided — 36 queries gained against 5 lost. rank-1 moves by 0.029 and that difference rests on about five queries; it is not significant and is not claimed.
 
-**A prediction recorded before the run, and falsified by it.** I expected no material gain: found@5 was already 0.93, so the answer nearly always reached the shortlist, and a cross-encoder reranker — strictly stronger at ordering than any bi-encoder — moves rank-1 by exactly zero across all three registers. That seemed to place the remainder in near-duplicate siblings and a labelling ceiling. It was wrong, and the flaw is worth keeping: **recall itself moved**, so the weaker embedder had been failing to retrieve some answers at all, and **a reranker cannot promote what retrieval never returned.**
+**A correction to how this was nearly published.** Five arms had been repeated three times each, every one returning sd 0.000, and that was read as the differences being established. It is not: **sd across runs is determinism, not precision.** rank-1 is a mean of Bernoulli draws over queries, so a 0.03 gap on 183 queries is about five of them, and resampling runs says nothing about that. The number this document was about to headline — a rank-1 gain — does not survive the correct test. The one that does is recall, which had looked like the smaller finding.
 
-Every table above this section reports the shipped default. The comparison below reports both systems on the better embedder, because that is the one the prior art uses and a comparison must not hold one side to a worse configuration than it runs.
+**And a prediction, recorded before the run and falsified by it.** I expected no gain at all: found@5 was already high, and a cross-encoder reranker — strictly stronger at ordering than any bi-encoder — moves rank-1 by zero, which seemed to place the remainder in near-duplicate siblings and a labelling ceiling. Wrong, and instructively so: **recall was what moved, and a reranker cannot promote what retrieval never returned.**
+
+**Dropping the lexical sub-query is worse, not better.** A 144-arm sweep over the symptom register put `vec` alone on top at 0.541. On the two registers it was not selected on it collapses — 0.284 against 0.525 where queries paste exact metric names — and over all 549 queries it loses **36 recall queries against 5** to `lex+vec`, p < 0.001. Selecting the best of 144 arms on one slice is multiple testing; the arm that survived the held-out registers was the third-placed one, and the honest change is the embedder alone.
+
+Everything above this section reports the shipped default. The comparison below reports both systems on the better embedder, because that is what the prior art runs.
 
 ---
+
 ## What took the top slot when the right memory did not
 
 Four causes, because they have four different fixes.
