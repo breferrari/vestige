@@ -68,6 +68,28 @@ The shared-pool column is **index cardinality under a shared vocabulary** — 23
 
 ---
 
+## The cost of sharing an index, as a curve
+
+The claim contains the words "once you have more than one project", and until now it had been demonstrated at exactly one point — eight services, 183 documents. That shows an effect exists and says nothing about whether it begins at two projects or eighty.
+
+Hold the caller, the queries, the engine, the embedder and the documents fixed. Vary only how many **other** projects' memories share the index:
+
+| other projects in the index | documents searched | rank-1 | found@5 |
+|---|---|---|---|
+| **0** — a per-caller view | 23 | **0.514** | **0.994** |
+| 1 | 46 | 0.350 | 0.918 |
+| 2 | 69 | 0.284 | 0.836 |
+| 4 | 114 | 0.213 | 0.645 |
+| 7 | 183 | 0.164 | 0.497 |
+
+**The penalty starts at the second project and compounds.** One other project costs 7.6 points of recall; seven cost half of it. rank-1 falls from 0.514 to 0.164 over the same range — the answer is still in the store, and it stops being the thing the agent sees.
+
+This is the mechanism behind every other number in this document. A shared pool does not degrade because its retrieval is worse; it degrades because the right answer acquires company. Filtering to declared reach first is what keeps the field at 23 documents instead of 183, and the curve says how much that is worth at each size.
+
+**Read the top row as an upper bound rather than a score.** A per-caller view is 23 documents because this world has eight services; the same filter over eighty projects would still hand the ranker only what reaches the caller, which is the property being claimed, but this fixture cannot show what happens at that size. The direction is established here; the magnitude beyond eight projects is not.
+
+---
+
 ## Retrieval, by how the question was asked
 
 Three registers, 183 queries each, one correct memory per query, on the shipped configuration.
