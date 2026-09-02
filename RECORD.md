@@ -55,6 +55,8 @@ Replicated from `bruno/qmd-retrieval-backend` at **3a75dd9** — its models, its
 
 Two questions matter, and no configuration wins both. **A project asking about a memory it wrote itself**, and **a project asking about a memory another repository wrote that declares it applies to them.**
 
+*Rows are configurations B, C and D respectively.*
+
 | | documents the caller searches | its own memory (found@5) | another project's, declared to reach it |
 |---|---|---|---|
 | MCS + qmd, one index per project | 23 | **0.984** | **0.000** |
@@ -83,6 +85,8 @@ The claim contains the words "once you have more than one project", and until no
 
 Hold the caller, the queries, the engine, the embedder and the documents fixed. Vary only how many **other** projects' memories share the index:
 
+*Configuration B, with the index progressively widened. The embedder and query shape are held fixed; only the number of other projects' memories in the index changes.*
+
 | other projects in the index | documents searched | rank-1 | found@5 |
 |---|---|---|---|
 | **0** — a project's own memories only | 23 | **0.514** | **0.994** |
@@ -107,6 +111,8 @@ Reach is only worth something if the declarations are honest, and they will not 
 
 Measured by making a quarter of the writers over-claim:
 
+*Configuration C — declared reach on — with a share of the writers over-claiming.*
+
 | | documents in the caller's view | its own memory (found@5) | another project's |
 |---|---|---|---|
 | every declaration honest | 73 | 0.705 | 0.772 |
@@ -124,6 +130,8 @@ That is the same mechanism as the curve above, arriving from a different directi
 ## What a caller searches as the organisation grows
 
 The curve above prices retrieval against view size. This is the other half: how the view size itself grows as projects are added, under each design. Counted rather than scored — view size is a property of the visibility rule, not of the ranker — with 20 memories per project and 31% of them declaring org-wide reach, the rate this corpus actually carries.
+
+*Configuration-independent: view size follows from the visibility rule, so it is counted rather than retrieved.*
 
 | projects | memories in the store | one index per project | **declared reach** | one shared pool |
 |---|---|---|---|---|
@@ -174,6 +182,8 @@ Every failure is ranking *within* the project that asked. Zero cross-project hit
 
 27 memories correct an earlier memory about the same incident. Those queries name a gold the corpus itself marks as out of date.
 
+*Configuration A.*
+
 | register | strict rank-1 | accepting the correction | stale ranked above its correction |
 |---|---|---|---|
 | symptom | 0.407 | **0.741** | 14 |
@@ -192,6 +202,8 @@ qmd exposes three model slots. Expansion loses and is stochastic. The cross-enco
 
 Measured across **all 549 queries**, bootstrap intervals resampling **queries**, McNemar's exact test on paired outcomes:
 
+*Configuration A against configuration B — the embedder is the only difference.*
+
 | | rank-1 | found@5 |
 |---|---|---|
 | embeddinggemma-300M (default) | 0.437 `[0.393, 0.481]` | 0.882 `[0.856, 0.900]` |
@@ -207,6 +219,8 @@ A 144-arm sweep across embedder, context, sub-query shape, intent and reranking 
 ## Latency, including where this system is slower
 
 Every arm measured the same way, on the same machine, split by whether the query stayed in one project — because a per-caller index is restarted when the caller changes, and that restart loads a model.
+
+*This system in configuration A; the other two in their own configurations. Same machine, same corpus.*
 
 | | same project | after a project switch |
 |---|---|---|
@@ -255,6 +269,8 @@ Identical on every axis a caller can observe. The cause is structural: qmd is in
 ## Containment
 
 A pool that leaves the machine needs to be inspected, and neither parent system inspects content. Against a corpus with 80 planted secrets — credentials, tokens, keys, private hosts, home paths, and base64-wrapped variants:
+
+*A separate fixture of 80 planted secrets, independent of the retrieval corpus.*
 
 | | result |
 |---|---|
