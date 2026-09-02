@@ -84,7 +84,15 @@ Vestige is not a from-scratch design and does not pretend to be. It takes a **di
 Honest about what is and is not established:
 
 - **Measured** on a corpus built to match a real store — 183 memories, median 502 words, gated against a working vault's own profile before any score is taken:
-  - **What reach buys.** 57 queries asked by a service that did *not* write the memory it needs, about a fault in a shared library: declared reach retrieves it into the top five **77%** of the time; one shared pool **60%**; one index per project **0%**, because the document is not in that index at any *k*.
+  - **What reach buys, and what it costs.** Two questions, measured on the same corpus: a project finding its own memory, and a project finding one another repository wrote that declares it applies to them.
+
+    | | own memory | another project's |
+    |---|---|---|
+    | one index per project | **0.984** | **0.000** |
+    | **declared reach** | 0.710 | **0.772** |
+    | one shared pool | 0.475 | 0.597 |
+
+    Against a shared pool it is better at both. Against a per-project index it **trades**: that configuration retrieves a project's own memories better than anything measured here and cannot reach another repository's memory at any *k*, because the document is not in the index.
   - **Within a project**, the right memory reaches the top five 84–93% of the time and is first 33–53%, depending entirely on how the question is phrased. The three query registers are reported separately because averaging them describes none of them.
   - **Zero** hits from another project and zero junk, in every register and arm — which follows from the filter running before the engine.
   - 80 of 80 planted secrets quarantined, zero contaminated blobs reaching git history, zero clean memories held back.

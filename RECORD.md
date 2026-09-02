@@ -68,7 +68,7 @@ Hold the caller, the queries, the engine, the embedder and the documents fixed. 
 
 | other projects in the index | documents searched | rank-1 | found@5 |
 |---|---|---|---|
-| **0** — a per-caller view | 23 | **0.514** | **0.994** |
+| **0** — a project's own memories only | 23 | **0.514** | **0.994** |
 | 1 | 46 | 0.350 | 0.918 |
 | 2 | 69 | 0.284 | 0.836 |
 | 4 | 114 | 0.213 | 0.645 |
@@ -78,7 +78,9 @@ Hold the caller, the queries, the engine, the embedder and the documents fixed. 
 
 This is the mechanism behind every other number in this document. A shared pool does not degrade because its retrieval is worse; it degrades because the right answer acquires company. Filtering to declared reach first is what keeps the field at 23 documents instead of 183, and the curve says how much that is worth at each size.
 
-**Read the top row as an upper bound rather than a score.** A per-caller view is 23 documents because this world has eight services; the same filter over eighty projects would still hand the ranker only what reaches the caller, which is the property being claimed, but this fixture cannot show what happens at that size. The direction is established here; the magnitude beyond eight projects is not.
+**The top row is not this system's configuration.** It is what a caller searches when it sees only what its own project wrote — the per-project index. With declared reach on, a caller here searches **73** documents, because 57 memories declare they reach every service, which places this system between the k=2 and k=4 rows. That is the exchange rate: transfer is bought by enlarging the view, and this table prices it.
+
+**And it is a direction, not a magnitude.** Eight services is where this fixture stops; the curve says the penalty begins at the second project and compounds, not what it is at eighty.
 
 ---
 
