@@ -20,7 +20,7 @@ Vestige makes reach a property of the memory:
 
 Two rules are enforced rather than trusted, and they matter more than they look:
 
-- **Reach is narrowed, never widened.** Claiming `general` while naming specific projects is downgraded to those projects — by the memory's own admission — and the original claim is kept as `claimed_scope` so the downgrade can be audited. Without this, a filter is defeated by anything that over-claims: measured at a 24% over-claim rate, an unprotected filter drops from 0.98 to 0.39 rank-1 accuracy.
+- **Reach is narrowed, never widened.** Claiming `general` while naming specific projects is downgraded to those projects — by the memory's own admission — and the original claim is kept as `claimed_scope` so the downgrade can be audited. Without this, a filter is defeated by anything that over-claims: at a 24% over-claim rate, narrowing holds the caller's view at 73 documents and the scores do not move, while the same rate of claims that *cannot* be narrowed grows the view to 100 documents and costs 13 points of in-project recall and 18 of transfer (found@5 0.705 to 0.579, and 0.772 to 0.614).
 - **A memory that would reach nobody is refused**, not widened. Granting the widest reach because the narrowest could not be determined is the opposite of what narrowing is for.
 
 ## What it does
@@ -40,7 +40,7 @@ Plus the parts that make memory actually happen rather than sit unused: a protoc
 /plugin install vestige
 ```
 
-Node 22+. [qmd](https://github.com/tobi/qmd) is required and is installed and kept current for you — it is not an optional accelerator: without semantic ranking inside the filtered view, rank-1 accuracy falls from 0.98 to 0.09.
+Node 22+. [qmd](https://github.com/tobi/qmd) is required and is installed and kept current for you — it is not an optional accelerator: the reach filter alone, ordered by specificity and recency, puts the right memory first 4.4% of the time and in the top five 22%; with semantic ranking inside the same filtered view those become 45% and 93%.
 
 For Codex, see [`codex/`](./codex).
 
@@ -86,22 +86,22 @@ Honest about what is and is not established:
 - **Measured** on a corpus built to match a real store — 183 memories, median 502 words, gated against a working vault's own profile before any score is taken:
   - **What reach buys, and what it costs.** Two questions, measured on the same corpus: a project finding its own memory, and a project finding one another repository wrote that declares it applies to them.
 
-    | | own memory | another project's |
-    |---|---|---|
-    | one index per project | **0.984** | **0.000** |
-    | **declared reach** | 0.710 | **0.772** |
-    | one shared pool | 0.475 | 0.597 |
+    | | own memory | another project's | top slots spent on another project's memory |
+    |---|---|---|---|
+    | one index per project | **0.984** | — *not in the index, at any k* | n/a |
+    | one shared pool | 0.475 | 0.597 | **130–147 of 183** |
+    | **declared reach** | 0.710 | **0.772** | **0** |
 
-    Against a shared pool it is better at both. Against a per-project index it **trades**: that configuration retrieves a project's own memories better than anything measured here and cannot reach another repository's memory at any *k*, because the document is not in the index.
+    Against a shared pool it is better at both, and it is the only one of the three that reaches another repository's lesson without showing the caller memories that do not apply to it. Against a per-project index it **trades**: that configuration retrieves a project's own memories better than anything measured here, and cannot reach another repository's memory at any *k* — the dash is an absent capability rather than a low score, because the document is not in the index.
   - **Within a project**, the right memory reaches the top five 84–93% of the time and is first 33–53%, depending entirely on how the question is phrased. The three query registers are reported separately because averaging them describes none of them.
-  - **Zero** hits from another project and zero junk, in every register and arm — which follows from the filter running before the engine.
+  - **Zero** hits from another project and zero junk, in every register and arm, against a shared pool's 130–147 of 183. It follows by construction — the filter runs before the engine, so an inapplicable memory is never a candidate — which is what makes it a guarantee rather than a ranking that usually behaves.
   - 80 of 80 planted secrets quarantined, zero contaminated blobs reaching git history, zero clean memories held back.
   - The behavioural layer verified inside live sessions rather than only in tests.
 
   Full method, every number, and what the measurements do **not** establish: **[RECORD.md](./RECORD.md)**. The harness is public at [memory-stack-lab](https://github.com/breferrari/memory-stack-lab).
 - **Established, and bad**: it cannot decline. Asked something the store has no memory of, it returns five confident memories that are indistinguishable — on every axis a caller can observe — from a real answer. Structural, measured, unfixed. Every ranking figure above is therefore conditional on the question having an answer.
 - **Not established**: it has not been used in anger on real work over time. There is no episodic tier — tested, and deliberately not built. Consolidation proposes but never writes, by design. Defects in this codebase have been found by benchmarking and by cross-platform CI rather than by anything failing in use; assume there are more.
-- **Measured at scale**: 180 projects and 3,600 memories, with **20 visible to one caller** — unchanged from 40 projects — and write cost flat at 3.9 ms per memory.
+- **Measured at scale, and the honest version is narrower than it sounds**: writing 3,600 memories across 180 projects costs a flat 3.8 ms each. That run scopes every memory to its own project, so the 20 documents a caller sees measures write cost rather than what reach does to a view. Counting the view properly — at this corpus's 31% org-wide sharing rate — a caller at 64 projects searches 411 of 1,280 documents. **Declared reach gives a field roughly three times smaller than a shared pool, not a constant one**, and composing that with the retrieval curve puts 64 projects well into the degraded region. See [RECORD.md](./RECORD.md).
 
 ## Documentation
 

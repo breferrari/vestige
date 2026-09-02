@@ -96,6 +96,23 @@ Three questions matter. **Can a project find a memory it wrote itself?** **Can i
 
 ---
 
+## Neither layer substitutes for the other
+
+The comparison above is about *which documents reach the ranker*. This is the other half of the same design: having filtered to the caller's view, the ranking still has to happen inside it.
+
+*Configuration C on the symptom register, over the same 24-document candidate set.*
+
+| | rank-1 | found@5 | candidate set |
+|---|---|---|---|
+| reach filter alone, ordered by specificity and recency | 0.044 | 0.219 | 24 documents |
+| filter **and** semantic ranking | **0.454** | **0.929** | 24 documents |
+
+**The filter decides what may be seen; it is nearly useless at deciding what to show first.** Ordered by specificity and recency alone, the right memory is first 4.4% of the time — a drawer of 24 documents with no idea which one you want. Ranking inside that drawer takes it to 45.4%.
+
+This is why the search engine is a hard dependency rather than an accelerator, and why the order is filter-then-rank rather than either alone. The alternative — rank globally and filter after — is bounded by the engine's result ceiling and degrades as projects multiply, which is the curve two sections down.
+
+---
+
 ## What is not the difference, and two things owed to MCS
 
 **Retrieval quality is not the differentiator.** With the same engine, embedder and query shape over the same 23 documents, per-project indexing and declared reach are identical to three decimals on all three registers — 0.508/0.984, 0.525/0.907, 0.366/0.923. Whatever separates these systems, it is not the ranking. What separates them is which documents reach the ranker, which is the previous section and is a question about correctness rather than quality.

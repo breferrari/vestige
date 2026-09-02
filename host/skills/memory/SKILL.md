@@ -11,7 +11,7 @@ Two stores, one reach rule.
 
 Call `recall` (everything this project may see) or `search` (semantic, inside what it may see) **before** answering from your own memory of a past decision. Your recollection of this conversation is not the record; the store is.
 
-Nothing outside the caller's reach can appear in either result, regardless of how well it matches — the reach filter runs first and ranking runs second. Both matter: the filter alone, without semantic ranking, finds the right memory first only 9% of the time.
+Nothing outside the caller's reach can appear in either result, regardless of how well it matches — the reach filter runs first and ranking runs second. Both matter: the filter alone, without semantic ranking, finds the right memory first only 4% of the time, and puts it in the top five 22%.
 
 ## Write when it transfers
 
