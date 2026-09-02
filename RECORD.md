@@ -225,6 +225,24 @@ Ten times on the first slot, four times on recall. The candidate-set column is t
 
 ---
 
+## Is the corpus about what it says it is about?
+
+A generated corpus can have volume and shape while its documents are topically interchangeable, in which case every retrieval score is measuring noise. Checked directly rather than assumed:
+
+| | measured |
+|---|---|
+| memories naming their own service | **183 of 183** |
+| same-topic vs different-topic vocabulary overlap | **1.30×** |
+| topic recovered from the text alone, by nearest neighbour | **79%** (chance: 8%) |
+| same-project vs different-project vocabulary overlap | **1.07×** |
+
+The first three say the content is genuinely about its subject: a caching incident on the ledger service reads as one, and a classifier with no metadata recovers the topic ten times better than chance.
+
+**The fourth is the interesting one, and it is a property rather than a flaw.** Memories from one service share barely more vocabulary than memories from different services, because the world deliberately gives all eight services the same libraries, config keys and metric names — which is what one company's codebase looks like.
+
+That is what makes the scoping result meaningful. **Projects here cannot be separated lexically, so retrieval cannot scope by accident.** A corpus of eight unrelated domains would let any ranker keep projects apart on vocabulary alone, and the reach model would be measuring nothing. Here it is measuring something, which is why a shared pool loses two thirds of its recall and a scoped view loses none.
+
+---
 ## What the fixture could still be doing for the system
 
 A synthetic corpus can flatter a retriever in ways no score reveals, so the ways this one might were measured rather than argued away.
