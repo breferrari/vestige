@@ -1,171 +1,146 @@
 # The Record
 
-This is how Vestige was built, what was measured, and why it has the shape it has. It exists so the reasoning can be checked by someone who was not here — every number below is reproducible from a committed script, and every design choice is traceable to a measurement that preceded it.
+This is what Vestige is, what was measured, and what the measurements support. It exists so the reasoning can be checked by someone who was not here.
 
-Three companion documents, kept separate on purpose: [ARCHITECTURE.md](./ARCHITECTURE.md) is how it works, [PROVENANCE.md](./PROVENANCE.md) is which parts came from where, and [README.md](./README.md) is how to install it. This document is the argument.
+Three companion documents: [ARCHITECTURE.md](./ARCHITECTURE.md) is how it works, [PROVENANCE.md](./PROVENANCE.md) is which parts came from where, [README.md](./README.md) is how to install it. This one is the argument.
 
----
-
-## Everything below was re-measured, and the earlier numbers are withdrawn
-
-An earlier version of this document reported retrieval at **rank-1 1.000** and later **0.541**, on a corpus of templated memories averaging 75 words with **0.2 concrete specifics each**. A working store's memories run to a median of **484 words and 14 specifics**. A corpus that thin cannot distinguish its own documents, so a ranker cannot either, and every retrieval score taken on it described the fixture rather than the system.
-
-The fixture was rebuilt, the numbers moved, and most of them moved **down**. They are reported here as measured.
-
-Two things follow that matter more than the scores:
-
-- **The old and new figures are not comparable, and neither are anyone else's.** The corpus changed *and* the query source changed, so the difference between the two runs cannot be attributed to either. Every competing configuration in this document was therefore re-run on the new corpus with the same scorer. Publishing a harder number for this system beside an easier one for another would be a comparison in which only one side changed.
-- **A gate now stands between the corpus and any score.** `harness/verify-corpus.mjs` profiles the fixture against a real store — length distribution, distinct vocabulary, density of concrete specifics counted as *types* and not occurrences — and the pipeline refuses to benchmark when it fails. It is two-sided: a fixture richer than production flatters the result exactly as a thinner one buries it.
+> **Earlier retrieval figures in this repository are withdrawn.** They were measured on a fixture of templated memories averaging 75 words with 0.2 concrete specifics each, against a working store's median of 484 words and 14 specifics. A corpus that thin cannot distinguish its own documents, so a ranker cannot either. Everything below was re-measured on a rebuilt fixture, and where a competing system appears it was re-run on its own configuration at a pinned commit. Nothing from the old fixture survives into a table here.
 
 ---
 
-## The method
+## The fixture
 
-**A pre-registered ablation ladder**, each rung changing one variable from the rung below, with a graded prediction recorded before the run. Two of those predictions were wrong in ways that changed the design.
+A simulated engineering organisation, not a bag of documents.
 
-**The fixture is a simulated engineering organisation**, not a bag of documents: 8 services with dependency edges, **143 incidents**, and **183 memories** written from them. 40 incidents span two services and are written up from both sides. 27 memories **correct an earlier memory about the same incident** — verified to read as retractions, not merely to carry the edge. Memories were generated with their length sampled from the real store's decile table and then **counted in code**, topped up until they landed; a model asked for 500 words returns 180 and reports success.
+**8 services** sharing one library, config-key and metric vocabulary — because one company has one stack, and because it makes the services **lexically inseparable** (same-project vocabulary overlap 1.07× against different-project). No ranker can scope by accident here; that is deliberate, and it is what makes a scoping claim testable rather than automatic.
 
-**Queries come from the incident record and never from the memory text**, in three registers that are reported separately and never averaged:
+**143 incidents, 183 memories.** 40 incidents written up from two sides. **27 memories correct an earlier memory about the same incident**, verified to read as retractions rather than merely carrying the edge. **57 memories declare reach beyond the repository that wrote them** — a fault in a shared library applies to every service importing it.
 
-| register | what it is |
-|---|---|
-| `symptom` | what someone types when they know what they are seeing — forbidden from using the artefact or metric name |
-| `identifier` | what they paste from a terminal |
-| `short` | three to five words, typed in a hurry |
+**Memory bodies** are generated, with length sampled from a real store's decile table and then counted in code and topped up until it lands: median 502 words against the reference's 484, 15.6 concrete specifics against 14.0. A gate profiles the corpus against that reference on four axes and the pipeline refuses to benchmark when it fails; it is two-sided, because a corpus richer than production flatters exactly as a thinner one buries.
 
-183 queries per register, one correct memory each. `found@5` is recall of that memory; `rank-1` is how often it is the first thing the agent sees.
+**Queries come from the incident record, never from the memory text**, in three registers reported separately and never averaged:
 
-**Every arm was scored by the same code**, including the competing systems. The query-to-answer mapping is written down beside the artifacts rather than recovered from filenames.
+| register | what it is | queries |
+|---|---|---|
+| `symptom` | what someone types knowing what they see — forbidden from using the artefact or metric name | 183 |
+| `identifier` | what they paste from a terminal | 183 |
+| `short` | three to five words | 183 |
+| `transfer` | asked by a service that did **not** write the memory it needs | 57 |
+
+One correct memory per query. `found@5` is recall of it; `rank-1` is how often it is first. Every arm, including competing systems, is scored by the same code.
+
+**Where the content is checked rather than assumed:** all 183 memories name their own service; same-topic vocabulary overlap runs 1.30× against different-topic; and a nearest-neighbour classifier with no metadata recovers the true topic 79% of the time against 8% chance.
 
 ---
+## What reach buys, which is the claim
+
+57 queries, each asked by a service that did not write the memory it needs, about a fault in a library every service imports. The memory declares it applies to them.
+
+| | rank-1 | found@5 | the document is reachable at all |
+|---|---|---|---|
+| **declared reach** | **0.263** | **0.772** | 1.00 |
+| one index per project | 0 | 0 | **0.00** |
+| one shared pool | 0.158 | 0.597 | 1.00 |
+
+**The zero in the middle row is not a ranking failure.** A per-project index holds what that project wrote; the caller's index has never heard of the document, at any *k*, under any ranker. The last column is reported so that absence is not read as a bad score.
+
+Against a shared pool, which *can* see it, declared reach retrieves it into the top five **77% of the time against 60%** — the same documents, the same engine, the same query, differing only in whether 182 other projects' memories are competing.
+
+Reach also decides storage. A memory reaching several projects cannot live inside one of them, and the write path routes it to the shared store without being asked. The write contract refused an earlier, malformed version of this declaration outright — `platform` names a runtime, not a set of repositories — which is the epistemic contract doing its job before any benchmark ran.
+
+---
+
 ## Retrieval, by how the question was asked
 
-Three registers, three retrieval arms, 183 queries each, one correct memory per query.
+Three registers, 183 queries each, one correct memory per query, on the shipped configuration.
 
-The expansion rows are single runs and are **not** the figure to quote — that arm varies between runs and its mean and spread are given below. The other two arms are deterministic.
-
-| register | arm | rank-1 | found@5 | MRR |
-|---|---|---|---|---|
-| symptom | typed sub-queries | **0.454** | 0.929 | 0.650 |
-| symptom | + query expansion | 0.393 | 0.885 | 0.593 |
-| symptom | + cross-encoder rerank | 0.454 | **0.956** | 0.667 |
-| identifier | typed sub-queries | **0.530** | 0.880 | 0.672 |
-| identifier | + query expansion | 0.497 | 0.880 | 0.643 |
-| identifier | + cross-encoder rerank | 0.530 | **0.918** | 0.689 |
-| short | typed sub-queries | 0.328 | 0.836 | 0.521 |
-| short | + query expansion | 0.355 | 0.858 | 0.543 |
-| short | + cross-encoder rerank | 0.328 | **0.902** | 0.556 |
-
-**The spread across registers is the result.** rank-1 runs from 0.328 to 0.530 depending only on how the question is phrased. An average over the three would be 0.44 — a number describing none of them, and the reason they are never averaged here.
-
-**Reranking never changes the answer, and reliably improves the shortlist.** rank-1 is identical to the digit in all three registers, and the entire miss breakdown is unchanged, while found@5 rises in all three. Compared list-by-list it changes the top-5 *set* for roughly half the queries and the first slot for almost none — 183 of 183 identical at rank 1 on one register, 180 of 183 on another. So the honest statement is conditional on what the caller reads: **a consumer of the top hit pays 28–34× the latency for an answer that does not change; one that reads five gains 2.7 to 6.6 points of recall.** It stays off by default.
-
-**Query expansion costs accuracy and repeatability both.** Over three runs on `symptom`:
-
-| | mean rank-1 | sd | runs |
+| register | rank-1 | found@5 | MRR |
 |---|---|---|---|
-| typed sub-queries | **0.454** | **0.000** | 0.454, 0.454, 0.454 |
-| + query expansion | 0.384 | 0.030 | 0.393, 0.344, 0.415 |
+| identifier | **0.530** | 0.880 | 0.672 |
+| symptom | 0.454 | **0.929** | 0.650 |
+| short | 0.328 | 0.836 | 0.521 |
 
-The typed arm returns the identical result three times; expansion swings **seven points between runs**, because a hypothetical document is generated text and it lands in the ranking. The gap between the arms is 0.070, comfortably outside that spread, so the accuracy conclusion holds — but it has to be quoted as a mean over runs, not the single figure a one-shot benchmark would have produced.
+**The spread is the result.** rank-1 runs 0.328 to 0.530 on identical corpora, differing only in phrasing. An average would be 0.44 — a number describing none of them.
 
-That spread also retires a claim this document nearly made. On `short`, a single run put expansion **0.027 ahead** — the register of three-to-five-word queries, which is precisely the case a hypothetical-document expansion exists for, and a tempting result. It is under one standard deviation of the expansion arm's own run-to-run noise. **On this evidence expansion is not better on short queries; it is indistinguishable there and worse elsewhere.**
+**Where the misses go**, and this is the more useful table:
 
-The mechanism behind the loss is visible in the misses: on `symptom` expansion takes same-project siblings from 83 to 96, because a hypothetical document resembles the *topic* rather than the incident.
+| register | same incident, other version | sibling | other project | junk | returned nothing |
+|---|---|---|---|---|---|
+| symptom | 17 | 83 | **0** | **0** | **0** |
+| identifier | 15 | 71 | **0** | **0** | **0** |
+| short | 18 | 105 | **0** | **0** | **0** |
+
+Every failure is ranking *within* the project that asked. Zero cross-project hits — though that follows from the filter running before the engine, so it states that the code does what it says rather than measuring retrieval quality.
+
+"Same incident, other version" is the predecessor, its correction, or another service's account of the same event: a question about which *version* to serve, invisible the moment it is counted as topical confusion.
 
 ---
 
-## The embedder was the wrong default — and only recall moved
+## Corrections, where a single right answer gets it backwards
 
-qmd exposes three model slots. Two are optional and both were measured: expansion loses, and the cross-encoder changes the shortlist but not the answer. The third runs on every query and every chunk, is the only one always on, and had never been varied — it was simply qmd's default. qmd ships a second embedder.
+27 memories correct an earlier memory about the same incident. Those queries name a gold the corpus itself marks as out of date.
 
-Measured across **all 549 queries**, with bootstrap intervals resampling **queries** and McNemar's exact test on the paired outcomes:
+| register | strict rank-1 | accepting the correction | stale ranked above its correction |
+|---|---|---|---|
+| symptom | 0.407 | **0.741** | 14 |
+| identifier | 0.370 | **0.630** | 17 |
+| short | 0.148 | **0.593** | 7 |
+
+On short, vague queries the two differ **fourfold**: the vaguer the question, the more often the system returns the *current* memory instead of the superseded one it was asked for — which is what a memory system should do, and what known-item scoring calls failure.
+
+The third column is the outcome that actually harms an agent: a stale write-up ranked above the correction sitting in the same store. It is not rare and it is not fixed.
+
+---
+
+## The embedder, and the one change worth making
+
+qmd exposes three model slots. Expansion loses and is stochastic. The cross-encoder changes half the shortlists and the first slot in almost none. The third runs on every query, is always on, and had never been varied.
+
+Measured across **all 549 queries**, bootstrap intervals resampling **queries**, McNemar's exact test on paired outcomes:
 
 | | rank-1 | found@5 |
 |---|---|---|
-| embeddinggemma-300M (the default) | 0.437 `[0.393, 0.481]` | 0.882 `[0.856, 0.900]` |
+| embeddinggemma-300M (default) | 0.437 `[0.393, 0.481]` | 0.882 `[0.856, 0.900]` |
 | **Qwen3-Embedding-0.6B** | 0.466 `[0.426, 0.501]` | **0.938** `[0.922, 0.955]` |
-| paired test | 38 vs 54 queries, **p = 0.117** | 5 vs **36** queries, **p < 0.001** |
+| paired | 38 vs 54 queries, p = 0.117 | 5 vs **36**, **p < 0.001** |
 
-**Recall improves and the first slot does not.** The intervals for found@5 do not overlap and the disagreement is one-sided — 36 queries gained against 5 lost. rank-1 moves by 0.029 and that difference rests on about five queries; it is not significant and is not claimed.
+**Recall improves; the first slot does not.** The rank-1 difference rests on about five queries and is not claimed.
 
-**A correction to how this was nearly published.** Five arms had been repeated three times each, every one returning sd 0.000, and that was read as the differences being established. It is not: **sd across runs is determinism, not precision.** rank-1 is a mean of Bernoulli draws over queries, so a 0.03 gap on 183 queries is about five of them, and resampling runs says nothing about that. The number this document was about to headline — a rank-1 gain — does not survive the correct test. The one that does is recall, which had looked like the smaller finding.
-
-**And a prediction, recorded before the run and falsified by it.** I expected no gain at all: found@5 was already high, and a cross-encoder reranker — strictly stronger at ordering than any bi-encoder — moves rank-1 by zero, which seemed to place the remainder in near-duplicate siblings and a labelling ceiling. Wrong, and instructively so: **recall was what moved, and a reranker cannot promote what retrieval never returned.**
-
-**Dropping the lexical sub-query is worse, not better.** A 144-arm sweep over the symptom register put `vec` alone on top at 0.541. On the two registers it was not selected on it collapses — 0.284 against 0.525 where queries paste exact metric names — and over all 549 queries it loses **36 recall queries against 5** to `lex+vec`, p < 0.001. Selecting the best of 144 arms on one slice is multiple testing; the arm that survived the held-out registers was the third-placed one, and the honest change is the embedder alone.
-
-Everything above this section reports the shipped default. The comparison below reports both systems on the better embedder, because that is what the prior art runs.
+A 144-arm sweep across embedder, context, sub-query shape, intent and reranking found **only two variables move anything**. Context and intent are exactly zero. Its leading arm — dropping the lexical sub-query — collapsed on a register it was not selected on (0.284 against 0.525, where queries paste exact identifiers) and loses 36 recall queries against 5 over the full set. **No arm ranking is claimed from it**; selecting the best of 144 on one slice is multiple testing, and the arm that survived held-out registers was third-placed.
 
 ---
 
-## What took the top slot when the right memory did not
+## Against MCS
 
-Four causes, because they have four different fixes.
+Replicated from `bruno/qmd-retrieval-backend` at **3a75dd9** — its models, its `global_context`, its call shape, its limit — on the same corpus, queries, scorer and pinned qmd.
 
-| register | rank-1 | same incident, other version | sibling | other project | junk | returned nothing |
-|---|---|---|---|---|---|---|
-| symptom | 0.454 | 17 | 83 | **0** | **0** | **0** |
-| identifier | 0.530 | 15 | 71 | **0** | **0** | **0** |
-| short | 0.328 | 18 | 105 | **0** | **0** | **0** |
+**Configured as it configures itself, retrieval is identical:**
 
-**Zero cross-project hits and zero junk, in every register and every arm.** Every failure is ranking *within* the project that asked. The reach filter is not partially effective here; it does not leak at all.
-
-**"Same incident, other version" is not topical confusion.** It is the predecessor, its correction, or the other service's account of the same event — a question about which *version* to serve, and it disappears the moment it is counted as a sibling.
-
----
-
-## The correction slice, which single-gold scoring gets backwards
-
-27 of the 183 memories correct an earlier memory about the same incident. Those 27 queries name a gold the corpus itself marks as **out of date**.
-
-| register | strict rank-1 | rank-1 accepting the correction | stale ranked above its correction | current memory on top |
-|---|---|---|---|---|
-| symptom | 0.407 | **0.741** | 14 | 9 |
-| identifier | 0.370 | **0.630** | 17 | 7 |
-| short | 0.148 | **0.593** | 7 | 12 |
-
-**On short, vague queries the two differ by four times.** The vaguer the question, the more often the system returns the *current* memory instead of the specific superseded one it was asked for — which is what a memory system should do, and what strict known-item scoring calls a failure.
-
-Reported as three numbers rather than one because they answer different questions. The third column is the outcome that actually harms an agent: a stale write-up ranked above the correction that exists in the same store. It is not rare, and it is not fixed.
-
----
-## Against MCS, on its own configuration
-
-The prior art is [`mcs-cli/memory`](https://github.com/mcs-cli/memory), which gained a qmd retrieval backend on the `bruno/qmd-retrieval-backend` branch. It is replicated here from that branch at **3a75dd9** — its models, its `global_context`, its call shape, its limit — on the same corpus, the same queries, the same scorer, and the same pinned qmd 2.8.3.
-
-An earlier version of this document compared against a replication taken from a **previous** read of that hook, and it had drifted in two ways that both understated it: the wrong embedding model, and a call shape its own instructions do not recommend. Every number produced that way is withdrawn. A comparison against a configuration its author does not use is not a measurement of their design.
-
-**Configured as it configures itself, retrieval is identical.**
-
-| register | MCS + qmd, one index per project | Vestige, same embedder |
+| register | MCS + qmd, per project | Vestige, same embedder |
 |---|---|---|
 | symptom | 0.508 / 0.984 | 0.508 / 0.984 |
 | identifier | 0.525 / 0.907 | 0.525 / 0.907 |
 | short | 0.366 / 0.923 | 0.366 / 0.923 |
 
-Identical to three decimals, on every register and both metrics, which is what should happen — same engine, same embedder, same query shape, and isolation either way. **There is no retrieval-quality difference between these two systems, and this document previously claimed one.**
+Identical to three decimals on every register and both metrics — same engine, same embedder, same query shape, isolation either way. **There is no retrieval-quality difference between these systems.**
 
-**The difference appears when memories are shared.** One index per project is what the `memory` pack builds. The `shared-memories` pack produces one pool over everything, and that is the configuration a team actually runs:
+Two things stated so they are not mistaken for credit. The typed `lex`+`vec` call shape both systems use **came from this project** — its author was pointed at this approach and adopted it, so the agreement is adoption and carries no independent weight. And on the embedder the prior art was simply right: its hook has used `Qwen3-Embedding-0.6B` while this project took qmd's default, which is the measured difference above.
 
-| register | one index per project | one shared pool |
+The difference that remains is the transfer table at the top of this document, and the shared-pool row below it — not a ranking score.
+
+| register | per-project index | one shared pool |
 |---|---|---|
-| symptom | 0.508 / 0.984 | **0.148 / 0.475** |
-| identifier | 0.525 / 0.907 | **0.164 / 0.519** |
-| short | 0.366 / 0.923 | **0.082 / 0.404** |
+| symptom | 0.508 / 0.984 | 0.148 / 0.475 |
+| identifier | 0.525 / 0.907 | 0.164 / 0.519 |
+| short | 0.366 / 0.923 | 0.082 / 0.404 |
 
-Roughly a third of the recall and a fifth of the first-slot accuracy; 130–147 of 183 top slots go to another project's memory. **Read this as index cardinality, not as declared reach** — 23 candidate documents against 183, in a world whose services deliberately share one vocabulary so that no ranker can separate them lexically. It is the regime the reach model is built for, and it is not a test of reach itself; see the limits section below. That is the cost the reach model removes, and it is the only part of this comparison that survives contact with a correct replication.
-
-**What that leaves as an honest claim.** Per-project indexes buy isolation by *not sharing* — a memory lives in one project's index and reaches nothing else. The reach model gets the same isolation while letting a memory declare that it reaches several projects, or all of them, and be narrowed at write time if it over-claims. That is an architectural difference rather than a retrieval one, and the number that supports it is the shared-pool row above, not a ranking score.
-
-**Stated because it would otherwise look like independent agreement:** the typed `lex` + `vec` call shape both systems use came from this project — its author was pointed at this approach and adopted it. Two systems agreeing because one told the other is one observation, not two, and it is not evidence for either design.
-
-**And on the embedder, the prior art was simply right.** Its hook has used `Qwen3-Embedding-0.6B` in all three slots for some time; this project took qmd's default, `embeddinggemma-300M`. Measured here, that choice is worth **+5.4 points of rank-1 and +5.5 of found@5 on the symptom register, at no latency cost** — so as this document was first written, the prior art's configuration beat this project's shipped default, for that reason alone.
+Read as **index cardinality under a shared vocabulary** — 23 candidate documents against 183, in a world whose services cannot be told apart lexically. It is the regime the reach model is built for; the reach claim itself is the transfer table.
 
 ---
-## Latency is two numbers, and the mean is neither
 
-The search session holds **one index**, and the index is per caller, so a query for a different project shuts it down and starts it again — paying a model load. A fixture that interleaves projects pays that on nearly every query; an agent working in one repository almost never does.
+## Latency
+
+The search session holds one index, keyed per caller, so a query for a different project restarts it and pays a model load.
 
 | arm | same project | after a project switch |
 |---|---|---|
@@ -173,134 +148,38 @@ The search session holds **one index**, and the index is per caller, so a query 
 | + query expansion | 300–330 ms | 2,733–2,786 ms |
 | + cross-encoder rerank | 729–756 ms | 3,165–3,252 ms |
 
-Reported split because a single mean over this workload was 1,421 ms — a figure nobody experiences. The earlier published figure of 14 ms was the same measurement taken on documents a fifth the length; it is withdrawn along with the rest.
+Reported split because a single mean over an interleaved workload was 1,421 ms — a figure nobody experiences.
 
 ---
 
-## What it cannot do: decline
+## What it cannot do
 
-Every query in every experiment above has a correct answer in the store, so no arm can be punished for answering when it should not. Measured separately, with 64 questions no engineering store could answer — cooking, music, eighteenth-century European history, a gibberish token — issued **with** a project identity, which is the harder case:
+**It cannot decline.** 64 questions no engineering store could answer — cooking, music, eighteenth-century history, a gibberish token — issued *with* a project identity, which is the harder case:
 
-| | returned something | mean hits | carried any caveat |
+| | returned something | mean hits | any caveat |
 |---|---|---|---|
-| off-topic — the store has nothing | 1.000 | 5.0 | 0.000 |
-| on-topic — the store holds the answer | 1.000 | 5.0 | 0.000 |
+| off-topic | 1.000 | 5.0 | 0.000 |
+| on-topic | 1.000 | 5.0 | 0.000 |
 
-**Identical on every axis the caller can observe.** An agent receiving these results cannot tell a question the store answers from one it has never heard of.
+Identical on every axis a caller can observe. The cause is structural: qmd is invoked in a mode that discards scores, the hit type carries no score field, and the no-match branch returns whatever is visible. The engine is not the limitation — competing arms *do* return nothing on the same corpus — but under this query shape and view it never did, across 549 real queries and 64 off-topic ones.
 
-The cause is structural rather than a tuning choice: qmd is invoked in a mode that returns filenames and discards scores, the hit type carries no score field, and the no-match branch returns whatever is visible in ranked order. There is nothing for a threshold to read.
-
-And the engine is not the limitation. The competing arms **do** return nothing for one to seven queries per register on the same engine and corpus. Under this query shape and per-caller view it never did — across 549 real queries and 64 deliberately off-topic ones — so the "nothing matched" fallback is dead code in practice. This is open, unfixed, and the most useful thing in this document for anyone deciding whether to depend on it.
-
----
-## Why the numbers fell: a corpus-quality ablation
-
-The retired fixture and this one differ in *two* ways — the corpus and where the queries came from — so the difference between the two runs cannot be attributed to either. This arm removes that ambiguity: **same world, same 143 incidents, same queries, same scorer, and the only variable is how much was written per memory.**
-
-| | median words | specifics | distinct specifics |
-|---|---|---|---|
-| thin arm | 97 | 7.3 | 5.3 |
-| rich arm | **502** | **15.6** | **9.4** |
-
-| register | rank-1 thin → rich | found@5 thin → rich | same-project siblings in misses |
-|---|---|---|---|
-| symptom | 0.541 → **0.454** | 0.934 → 0.929 | 69 → **83** |
-| identifier | 0.508 → 0.530 | 0.852 → 0.880 | 65 → 71 |
-| short | 0.399 → **0.328** | 0.847 → 0.836 | 88 → **105** |
-
-**A five-fold richer corpus lowers rank-1 and leaves found@5 alone.** Recall does not move: the right memory reaches the shortlist just as often. What changes is the first slot, and the mechanism is in the miss column — **richer memories make same-project siblings harder to tell apart**, because two 500-word write-ups about neighbouring incidents in one service share far more surface than two 97-word ones.
-
-So the drop from the earlier published figures is not the system getting worse. It is the task getting harder in the specific way real stores are harder, and the earlier fixture was easy in a way that flattered the first-slot number while saying nothing about recall.
-
-The exception is the `identifier` register, where richer memories help slightly: a pasted metric name has more text to appear in.
-
-**Two bounds, stated because they limit the claim.** The thin arm lands at a median of 97 words against a sampled target of 75 — the generating model floors around 50–60 words for this prompt and the length loop only ever adds — so the contrast is 5.2× rather than the ~7× separating this corpus from the retired one, and the effect measured here is a **lower bound** on what that fixture's thinness was worth. And the thin arm's symptom rank-1 of 0.541 is numerically identical to the figure this document used to publish; that is a coincidence of two different query sets on two different thin corpora, and it is not offered as a reproduction.
-
----
-## Does each layer earn its place?
-
-The reach filter decides what may be seen; the ranker decides which of it answers the question. Both arms over the same pool, same queries, same caller — the only difference is whether the candidate set is ranked against the question at all:
-
-| symptom register | rank-1 | found@5 | candidate set |
-|---|---|---|---|
-| reach filter alone, ordered by specificity and recency | 0.044 | 0.219 | 24 documents |
-| filter **and** semantic ranking | **0.454** | **0.929** | 24 documents |
-
-Ten times on the first slot, four times on recall. The candidate-set column is the point: the ranker is picking the right memory out of the **24** this caller may see. The filter is what makes that number 24 rather than 183, and the competing configurations that rank over one shared pool are the measurement of what happens without it.
+**Every rank-1 figure in this document is therefore conditional ranking under forced retrieval.**
 
 ---
 
-## Is the corpus about what it says it is about?
+## What this does not establish
 
-A generated corpus can have volume and shape while its documents are topically interchangeable, in which case every retrieval score is measuring noise. Checked directly rather than assumed:
+**The fixture is written by one model from one world.** Deleting each memory's opening sentence does not significantly change the score (26 lost, 23 gained, p = 0.78), which refutes the specific charge that the symptom register matches a shared first line — the signal is spread through the document. It does not address the broader entanglement, and no overlap statistic can. Escaping it needs a second model writing the queries, or memories from real teams.
 
-| | measured |
-|---|---|
-| memories naming their own service | **183 of 183** |
-| same-topic vs different-topic vocabulary overlap | **1.30×** |
-| topic recovered from the text alone, by nearest neighbour | **79%** (chance: 8%) |
-| same-project vs different-project vocabulary overlap | **1.07×** |
+**Overlap concentrates 3.3–3.4× in each memory's first sentence**, across every register. A real incident note does open by stating its symptom, so this is not simply wrong; it does make the fixture easier than one where the symptom must be inferred.
 
-The first three say the content is genuinely about its subject: a caching incident on the ledger service reads as one, and a classifier with no metadata recovers the topic ten times better than chance.
+**The corpus target distribution was matched to one working store.** Sound as an internal fixture, untested as transfer to anyone else's.
 
-**The fourth is the interesting one, and it is a property rather than a flaw.** Memories from one service share barely more vocabulary than memories from different services, because the world deliberately gives all eight services the same libraries, config keys and metric names — which is what one company's codebase looks like.
+**The competing system's arms run through this project's query function** in the identical-retrieval table. That is a fair test of its *configuration* and not of its *product*; the transfer table's folder arms use a neutral client.
 
-That is what makes the scoping result meaningful. **Projects here cannot be separated lexically, so retrieval cannot scope by accident.** A corpus of eight unrelated domains would let any ranker keep projects apart on vocabulary alone, and the reach model would be measuring nothing. Here it is measuring something, which is why a shared pool loses two thirds of its recall and a scoped view loses none.
+**found@5 over a median of 23 candidates** is a fifth of the drawer. Systems will not separate on it, and it should not be read as a recall story.
 
 ---
-## What the fixture could still be doing for the system
-
-A synthetic corpus can flatter a retriever in ways no score reveals, so the ways this one might were measured rather than argued away.
-
-**Queries are written from the incident record and never from the memory text.** That removes the obvious leak — a query paraphrased from its own answer shares an author and a vocabulary with it — but both artefacts are still rendered from the same structured record, so the question is what carries the match. Overlap between a query and its correct memory, against a same-project sibling and against another project's memory:
-
-| register | query↔gold | ↔sibling | ↔other project | ratio | what carries it |
-|---|---|---|---|---|---|
-| symptom | 0.0161 | 0.0067 | 0.0070 | 2.4× | *users, memory, daily, messages, upstream, database* |
-| identifier | 0.0066 | 0.0015 | 0.0015 | 4.3× | `dlq_depth`, `capture_lag_seconds`, `pool_wait_ms`, `cache_hit_ratio` |
-| short | 0.0092 | 0.0034 | 0.0038 | 2.7× | *memory, field, duplicate, upstream, charge, stale* |
-
-**The `identifier` row is the control that makes the other two believable.** It is the register that pastes the metric name by design, and the diagnostic detects exactly that — schema identifiers carrying the match, at nearly double the ratio. A leakage test that found nothing everywhere would be indistinguishable from a broken one. On the two registers where leakage would be a problem, ordinary English carries the match.
-
-**A leak that stripping the heading did not remove.** Titles derive from the incident symptom and the opening line of the body restates it, so a symptom query matches the first sentence at 0.052 against 0.015 for the rest of the document — **3.3–3.4× concentration, consistent across all three registers**. A real incident note does open by stating the symptom, so this is not simply wrong; it does make the fixture easier than one where the symptom must be inferred from the mechanism.
-
-**Where the corpus does not match the store it models.** It carries 15.6 concrete specifics per memory against a real 14.0, but only **9.4 distinct** ones against 11.2 — it repeats identifiers slightly more than real memories do. Both are inside the gate's band and the direction is stated rather than smoothed over.
-
-**And a claim that had to be corrected downward.** The world offers 175 memories an earlier note to reference; **77 actually do**. The generator's instruction is not a property of its output, and the realised rate is what the corpus has.
-
----
-## The counterfactual that settles it
-
-A counterfactual, because overlap statistics can only fail to find leakage and never rule it out. Each memory keeps its prose; the entities it inherited from the incident record — artefact, metric name, magnitude, config key, library — are replaced with those of a different incident in the same project. **180 of 183 memories changed.** The queries are untouched.
-
-| register | rank-1 control → swapped | found@5 control → swapped |
-|---|---|---|
-| identifier *(control)* | 0.530 → **0.213** | 0.880 → **0.530** |
-| symptom | 0.454 → 0.464 | 0.929 → 0.907 |
-
-**The identifier arm collapses, which is what proves the swap landed.** Those queries paste the metric name by design, so removing it from the document should destroy the match, and it does — recall falls by 40 points. An experiment that moved nothing anywhere would have been indistinguishable from one that did not run.
-
-**The symptom arm does not move at all.** So symptom-register retrieval is not running through the incident's identifiers; it runs through the **shared symptom narrative** — the sentence the query and the memory are both rendered from. Combined with the 3.3–3.4× overlap concentration in each memory's opening line, that is the fixture's real residual advantage, and it is structural rather than a bug to be fixed: a person describing a symptom and a write-up of that symptom genuinely do share vocabulary. It is nonetheless tighter here than in life, where two people describe one outage differently.
-
-**What that licenses and what it does not.** The cross-project result (zero leaks against 130–147) does not depend on the narrative at all. The rank-1 and found@5 figures for the symptom register do, at least in part, and should be read as an upper bound for a workload whose queries and documents descend from one canonical phrasing.
-
----
-## What this document does not establish
-
-An outside review, given the full method and all three repositories, produced four objections that hold. They are here rather than in a footnote because each one bounds a claim above.
-
-**The reach model is not what was tested.** Every one of the 183 memories in this corpus is `scope: project`, and **none declares more than one**. So the scoped-versus-shared contrast compares a folder of 23 files against a folder of 183 — it measures **index cardinality**, not declared reach. The thing this system is actually for — a memory that names several projects and appears in each of their views — has no memory in the fixture and no cell in the scorer. A missed-transfer error, where a memory whose reach includes the caller fails to appear, cannot currently be counted at all.
-
-**"Zero cross-project hits" is the view definition, not a result.** The filter runs before the engine, so the engine is never offered another project's memory. That number states that the code does what it says; it is not evidence of retrieval quality and should not be read beside one.
-
-**The competing system's arms ran through this project's query function.** `bench-mcs-current.mjs` replicates its models, its `global_context`, its call shape and its limit — and then issues the query through `core/lib/qmd-session.ts`. That is a fair test of *its configuration* and not of *its product*, and the honest caption for those rows is "qmd layout experiment", not "their system".
-
-**No arm ranking from the 144-arm sweep is claimed.** Context, intent and reranking came back at exactly 0.000 marginal effect, which says those arms did not change the ordered list rather than saying something about retrieval. The one change that survived a paired test on 549 queries is the embedder, on recall only.
-
-**And the fixture's own limit, stated once more:** the corpus and the queries are rendered by one model from one world. Deleting each memory's opening sentence does **not** significantly change the score (p = 0.78), which refutes the specific charge that the symptom register matches a shared first line — but it does not address the broader entanglement, and no overlap statistic can. Escaping that needs a second model writing the queries, or real memories from real teams. Neither is done here.
-
----
-
 ## Containment
 
 A pool that leaves the machine needs to be inspected, and neither parent system inspects content. Against a corpus with 80 planted secrets — credentials, tokens, keys, private hosts, home paths, and base64-wrapped variants:
@@ -345,18 +224,13 @@ Every decision the gate makes is appended to a bounded audit log, because the fa
 
 | The measurement | What it forced |
 |---|---|
-| Both shared-pool configurations spend 130–147 of 183 top slots on another project's memories; this system spends **zero** | Reach is the primary structure, and filtering happens before ranking rather than after |
-| A memory's reach and its location can disagree | Reach *computes* storage — the same declaration decides both |
-| Typed sub-queries return an identical result three times; expansion swings seven points | The query is stated, not expanded, and the engine is kept resident |
-| Reranking changes the top-5 set for half the queries and the first slot for almost none | Reranking is off by default, and the reason is written down rather than assumed |
+| A per-project index cannot reach a memory another repo wrote, at any *k* | Reach is declared per memory, and reach decides storage |
+| Declared reach retrieves a shared lesson into the top five 77% of the time against a shared pool's 60% | Filter to the caller's view first, rank inside it |
+| Services sharing one stack are lexically inseparable (1.07×) | Scoping cannot be left to the ranker |
+| A stale memory outranks its own correction in 7–17 of 27 cases | Supersession is recorded, and remains unsolved in ranking |
+| Off-topic and on-topic results are indistinguishable to the caller | Stated as a limit; unresolved |
 | A gate after staging leaves a dirty history | The content gate runs before the sync path touches the tree |
 | Every silent failure in this layer presents as "no results" | `explain`, and an audit log for the gate |
-| The system cannot tell an unanswerable question from an answerable one | **Unresolved.** Stated as a limitation rather than designed around |
-
----
-## What is deliberately absent
-
-Stated so nobody assumes otherwise: **it cannot decline** — the measurement is above and the cause is structural; there is no episodic tier (tested, did not reproduce); no consolidation of repeated observations into rules; and no decay or confirmation signal, so nothing can sink on evidence. The content gate is a deny-list with measured limits. A stale memory outranks its own correction in 7 to 17 of the 27 cases where one exists. These are open, not hidden.
 
 ---
 
