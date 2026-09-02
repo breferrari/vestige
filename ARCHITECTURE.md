@@ -188,7 +188,14 @@ flowchart TD
 
 **The index is per caller and named.** Isolation is a property of the index *name*, not of a directory — running `qmd init` in a per-caller directory silently creates nothing and every collection lands in the shared default index, which would put every project's memories in one place underneath a filter whose entire job is to keep them apart. Index builds are serialised with a cross-process lock, because two sessions building at once contend on one shared cache and the loser would otherwise degrade to unranked results without saying so.
 
-**Both layers matter.** The filter decides what may be seen; the ranker decides which of it answers the question. With the filter and no semantic ranking, rank-1 accuracy is 0.09 against 0.98. Neither substitutes for the other.
+**Both layers matter.** The filter decides what may be seen; the ranker decides which of it answers the question. Re-measured on a corpus matching a real store, symptom register:
+
+| | rank-1 | found@5 | candidate set |
+|---|---|---|---|
+| reach filter alone, ordered by specificity and recency | 0.044 | 0.219 | 24 documents |
+| filter **and** semantic ranking | **0.454** | **0.929** | 24 documents |
+
+Ten times on the first slot and four times on recall. The candidate-set column is the honest framing of what the ranker is asked to do: pick the right memory out of the **24** this caller may see, not out of the whole store. The filter is what makes that number 24.
 
 **The query is stated, not expanded.** qmd's plain-text `query` is auto-expanded by the SDK into lex/vec/**hyde** variants, and HyDE writes a hypothetical answer with a model — an LLM call on every search, whose output then feeds the ranking. Vestige passes typed sub-queries instead: lexical first (it carries 2× weight, and a memory is found by the words of the problem more often than by a paraphrase), then vector.
 

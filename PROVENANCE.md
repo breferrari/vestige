@@ -73,7 +73,7 @@ Store *kinds* — `repo`, `external`, `local` — each declaring which scopes it
 
 The reach filter runs first and semantic ranking second, inside a materialised view of exactly what the caller may see, indexed under a **per-caller name**.
 
-The alternative — rank globally, filter after — is bounded by the retrieval engine's result ceiling and degrades as projects multiply. Measured: 0.09 rank-1 with the filter and no ranking, 0.98 with both. Neither layer substitutes for the other.
+The alternative — rank globally, filter after — is bounded by the retrieval engine's result ceiling and degrades as projects multiply. Measured on a corpus matching a real store: **0.044 rank-1 with the filter and no ranking, 0.454 with both**, over a candidate set of 24 documents. Neither layer substitutes for the other, and the competing configurations that rank over one shared pool spend 130–147 of 183 top slots on another project's memories, where this spends none.
 
 ### A write-time content gate
 

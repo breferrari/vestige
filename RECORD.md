@@ -205,6 +205,19 @@ The exception is the `identifier` register, where richer memories help slightly:
 **Two bounds, stated because they limit the claim.** The thin arm lands at a median of 97 words against a sampled target of 75 — the generating model floors around 50–60 words for this prompt and the length loop only ever adds — so the contrast is 5.2× rather than the ~7× separating this corpus from the retired one, and the effect measured here is a **lower bound** on what that fixture's thinness was worth. And the thin arm's symptom rank-1 of 0.541 is numerically identical to the figure this document used to publish; that is a coincidence of two different query sets on two different thin corpora, and it is not offered as a reproduction.
 
 ---
+## Does each layer earn its place?
+
+The reach filter decides what may be seen; the ranker decides which of it answers the question. Both arms over the same pool, same queries, same caller — the only difference is whether the candidate set is ranked against the question at all:
+
+| symptom register | rank-1 | found@5 | candidate set |
+|---|---|---|---|
+| reach filter alone, ordered by specificity and recency | 0.044 | 0.219 | 24 documents |
+| filter **and** semantic ranking | **0.454** | **0.929** | 24 documents |
+
+Ten times on the first slot, four times on recall. The candidate-set column is the point: the ranker is picking the right memory out of the **24** this caller may see. The filter is what makes that number 24 rather than 183, and the competing configurations that rank over one shared pool are the measurement of what happens without it.
+
+---
+
 ## What the fixture could still be doing for the system
 
 A synthetic corpus can flatter a retriever in ways no score reveals, so the ways this one might were measured rather than argued away.
@@ -224,6 +237,22 @@ A synthetic corpus can flatter a retriever in ways no score reveals, so the ways
 **Where the corpus does not match the store it models.** It carries 15.6 concrete specifics per memory against a real 14.0, but only **9.4 distinct** ones against 11.2 — it repeats identifiers slightly more than real memories do. Both are inside the gate's band and the direction is stated rather than smoothed over.
 
 **And a claim that had to be corrected downward.** The world offers 175 memories an earlier note to reference; **77 actually do**. The generator's instruction is not a property of its output, and the realised rate is what the corpus has.
+
+---
+## The counterfactual that settles it
+
+A counterfactual, because overlap statistics can only fail to find leakage and never rule it out. Each memory keeps its prose; the entities it inherited from the incident record — artefact, metric name, magnitude, config key, library — are replaced with those of a different incident in the same project. **180 of 183 memories changed.** The queries are untouched.
+
+| register | rank-1 control → swapped | found@5 control → swapped |
+|---|---|---|
+| identifier *(control)* | 0.530 → **0.213** | 0.880 → **0.530** |
+| symptom | 0.454 → 0.464 | 0.929 → 0.907 |
+
+**The identifier arm collapses, which is what proves the swap landed.** Those queries paste the metric name by design, so removing it from the document should destroy the match, and it does — recall falls by 40 points. An experiment that moved nothing anywhere would have been indistinguishable from one that did not run.
+
+**The symptom arm does not move at all.** So symptom-register retrieval is not running through the incident's identifiers; it runs through the **shared symptom narrative** — the sentence the query and the memory are both rendered from. Combined with the 3.3–3.4× overlap concentration in each memory's opening line, that is the fixture's real residual advantage, and it is structural rather than a bug to be fixed: a person describing a symptom and a write-up of that symptom genuinely do share vocabulary. It is nonetheless tighter here than in life, where two people describe one outage differently.
+
+**What that licenses and what it does not.** The cross-project result (zero leaks against 130–147) does not depend on the narrative at all. The rank-1 and found@5 figures for the symptom register do, at least in part, and should be read as an upper bound for a workload whose queries and documents descend from one canonical phrasing.
 
 ---
 ## Containment
@@ -281,7 +310,7 @@ Every decision the gate makes is appended to a bounded audit log, because the fa
 ---
 ## What is deliberately absent
 
-Stated so nobody assumes otherwise: there is no episodic tier (tested, did not reproduce), no consolidation of repeated observations into rules, and no decay or confirmation signal — nothing tracks whether a memory was ever retrieved or ever useful, so nothing can sink on evidence. The content gate is a deny-list with measured limits. These are open, not hidden.
+Stated so nobody assumes otherwise: **it cannot decline** — the measurement is above and the cause is structural; there is no episodic tier (tested, did not reproduce); no consolidation of repeated observations into rules; and no decay or confirmation signal, so nothing can sink on evidence. The content gate is a deny-list with measured limits. A stale memory outranks its own correction in 7 to 17 of the 27 cases where one exists. These are open, not hidden.
 
 ---
 
