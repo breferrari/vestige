@@ -32,6 +32,23 @@ One correct memory per query. `found@5` is recall of it; `rank-1` is how often i
 **Where the content is checked rather than assumed:** all 183 memories name their own service; same-topic vocabulary overlap runs 1.30× against different-topic; and a nearest-neighbour classifier with no metadata recovers the true topic 79% of the time against 8% chance.
 
 ---
+## The four configurations, so every number can be placed
+
+Numbers below are measured under one of four setups. They are not interchangeable, and an earlier draft of this document put two of them in one sentence.
+
+| | embedder | what the caller's view contains | documents searched |
+|---|---|---|---|
+| **A — shipped default** | embeddinggemma-300M | its own project's memories | 23 |
+| **B — better embedder** | Qwen3-Embedding-0.6B | its own project's memories | 23 |
+| **C — declared reach on** | Qwen3-Embedding-0.6B | its own, plus every memory declaring it reaches this project | 73 |
+| **D — one shared pool** | Qwen3-Embedding-0.6B | everything, from every project | 183 |
+
+**C is what this system does when reach is used**, and it is the configuration the transfer and trade-off tables report. **A is what ships today.** B exists because the prior art uses that embedder and a comparison must not hold one side to a worse configuration. D is the competing shared-pool arm.
+
+Each table below names its configuration.
+
+---
+
 ## Against MCS: what each configuration costs
 
 Replicated from `bruno/qmd-retrieval-backend` at **3a75dd9** — its models, its `global_context`, its call shape, its limit — on the same corpus, queries, scorer and pinned qmd.
@@ -127,7 +144,9 @@ The curve above prices retrieval against view size. This is the other half: how 
 
 ## Retrieval, by how the question was asked
 
-Three registers, 183 queries each, one correct memory per query, on the shipped configuration.
+Three registers, 183 queries each, one correct memory per query. **Configuration A** — the shipped default embedder, over a store where every memory is scoped to its own project.
+
+These are the highest in-project figures in this document, and that is a property of the configuration rather than a best case to quote: a 23-document view is the smallest field any arm here searches. Turning declared reach on (configuration C) puts 73 documents in front of the ranker and takes symptom found@5 from 0.929 to 0.710, which is the trade priced in the section above.
 
 | register | rank-1 | found@5 | MRR |
 |---|---|---|---|
