@@ -84,6 +84,27 @@ This is the mechanism behind every other number in this document. A shared pool 
 
 ---
 
+## What a caller searches as the organisation grows
+
+The curve above prices retrieval against view size. This is the other half: how the view size itself grows as projects are added, under each design. Counted rather than scored — view size is a property of the visibility rule, not of the ranker — with 20 memories per project and 31% of them declaring org-wide reach, the rate this corpus actually carries.
+
+| projects | memories in the store | one index per project | **declared reach** | one shared pool |
+|---|---|---|---|---|
+| 2 | 40 | 20 | 25 | 40 |
+| 4 | 80 | 20 | 36 | 80 |
+| 8 | 160 | 20 | 68 | 160 |
+| 16 | 320 | 20 | 119 | 320 |
+| 32 | 640 | 20 | 222 | 640 |
+| 64 | 1,280 | 20 | **411** | 1,280 |
+
+**Reach does not bound the view. It scales it by how much is shared.** A shared pool's view is the whole store — slope 1. A per-project index is flat at 20 and cannot see anything another project wrote. Declared reach is linear too, with a slope set by the sharing rate rather than by the project count: at 64 projects a caller searches 411 of 1,280 documents, **32% of the store**.
+
+**So the honest claim at scale is "three times smaller field", not "constant field".** Composed with the measured retrieval curve — where 183 documents gave found@5 0.497 and 23 gave 0.994 — a reach view of 411 at 64 projects is well into the degraded region. Declared reach delays that degradation by roughly a factor of three; it does not prevent it, and a store where more is genuinely shared gets less benefit.
+
+**That composition is a projection, not a measurement.** The view-size table is measured and the retrieval curve is measured; putting them together to say what retrieval looks like at 64 projects is arithmetic over two fixtures, and this document does not have a 64-project corpus to check it against.
+
+---
+
 ## Retrieval, by how the question was asked
 
 Three registers, 183 queries each, one correct memory per query, on the shipped configuration.
