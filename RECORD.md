@@ -84,6 +84,26 @@ This is the mechanism behind every other number in this document. A shared pool 
 
 ---
 
+## A writer who claims too much
+
+Reach is only worth something if the declarations are honest, and they will not be: the easiest thing for a writer to say is that a lesson applies everywhere. The write path narrows rather than trusting — a memory claiming `general` while naming specific projects is stored as `project` scoped to those, with `claimed_scope: general` kept so the claim is auditable rather than erased.
+
+Measured by making a quarter of the writers over-claim:
+
+| | documents in the caller's view | its own memory (found@5) | another project's |
+|---|---|---|---|
+| every declaration honest | 73 | 0.705 | 0.772 |
+| **24% over-claim, narrowed at write time** | **73** | **0.710** | **0.790** |
+| 24% over-claim that cannot be narrowed | 100 | 0.579 | 0.614 |
+
+**A quarter of the store over-claiming costs nothing when the narrowing catches it.** The view does not move, and neither do the scores — an over-claimed memory that names its projects is simply filed as reaching those projects, which is what it always meant.
+
+**The third row is what it prevents.** When the claim cannot be narrowed — `general` with no projects named, so there is nothing to narrow *to* — every such memory becomes visible to every caller. The view grows from 73 to 100 documents and takes **13 points of in-project recall and 18 of transfer** with it.
+
+That is the same mechanism as the curve above, arriving from a different direction: reach is only a filter while the declarations mean something, and the write path is what keeps them meaning something. A memory that would reach nobody is refused outright for the same reason — granting the widest reach because the narrowest could not be determined is backwards.
+
+---
+
 ## What a caller searches as the organisation grows
 
 The curve above prices retrieval against view size. This is the other half: how the view size itself grows as projects are added, under each design. Counted rather than scored — view size is a property of the visibility rule, not of the ranker — with 20 memories per project and 31% of them declaring org-wide reach, the rate this corpus actually carries.
