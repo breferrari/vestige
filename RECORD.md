@@ -32,6 +32,24 @@ One correct memory per query. `found@5` is recall of it; `rank-1` is how often i
 **Where the content is checked rather than assumed:** all 183 memories name their own service; same-topic vocabulary overlap runs 1.30× against different-topic; and a nearest-neighbour classifier with no metadata recovers the true topic 79% of the time against 8% chance.
 
 ---
+## The advantage, in one table
+
+Same corpus, same embedder, same query shape, same scorer. Two axes: finding a memory your own project wrote, and finding one another project wrote that declares it applies to you.
+
+| | in-project (found@5) | cross-project transfer (found@5) |
+|---|---|---|
+| MCS + qmd, one index per project | **0.984** | **0.000** |
+| MCS + qmd, one shared pool | 0.475 | 0.597 |
+| **Vestige** | **0.984** | **0.772** |
+
+**The prior art's two configurations are opposite ends of a trade-off.** One index per project retrieves as well as anything measured here — identical to this system to three decimals — and cannot carry a lesson across a repository boundary at all, because the document is in its author's index and nowhere else. One shared pool makes transfer possible and costs half of in-project recall, because every other project's memories now compete for the same five slots.
+
+**Declared reach does not make that trade**, and the reason is that one declaration does two jobs: it decides who may see a memory, and it decides where the memory is stored. A lesson reaching eight repositories cannot live inside one of them, so it is written to the shared store — and the caller reads a view containing exactly what reaches them, which is 23 documents rather than 183.
+
+**What is not an advantage, stated plainly: retrieval quality.** With the same engine, embedder and query shape there is no difference, and an earlier version of this document claimed one.
+
+---
+
 ## What reach buys, which is the claim
 
 57 queries, each asked by a service that did not write the memory it needs, about a fault in a library every service imports. The memory declares it applies to them.
